@@ -103,9 +103,27 @@ export const authFunctions = {
         .from('profiles')
         .select('*')
         .eq('id', user.id)
-        .single();
+        .maybeSingle(); // Use maybeSingle instead of single to handle no results
 
-      if (error) throw error;
+      if (error && error.code !== 'PGRST116') throw error; // Ignore "no rows" error
+
+      // If no profile exists, create one
+      if (!profile) {
+        const { data: newProfile, error: createError } = await supabase
+          .from('profiles')
+          .insert({
+            id: user.id,
+            email: user.email,
+            full_name: user.user_metadata?.full_name || 'User',
+            role: 'user',
+          })
+          .select()
+          .single();
+
+        if (createError) throw createError;
+        return { profile: newProfile, error: null };
+      }
+
       return { profile, error: null };
     } catch (error) {
       return { profile: null, error: error.message };

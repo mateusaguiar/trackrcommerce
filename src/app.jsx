@@ -60,6 +60,37 @@ export default function App() {
   const [isLoginOpen, setIsLoginOpen] = useState(false);
   const [view, setView] = useState('landing');
   const [activeTab, setActiveTab] = useState('overview');
+  const [accessError, setAccessError] = useState(null);
+
+  // ============================================
+  // ROLE-BASED ACCESS CONTROL
+  // ============================================
+  const ALLOWED_DASHBOARD_ROLES = ['master', 'brand_admin', 'influencer'];
+
+  const checkUserRole = (profile) => {
+    if (!profile) {
+      return {
+        hasAccess: false,
+        error: 'Perfil não encontrado. Por favor, entre em contato com o suporte.',
+      };
+    }
+
+    if (!profile.role) {
+      return {
+        hasAccess: false,
+        error: 'Função de usuário não definida. Por favor, entre em contato com o suporte.',
+      };
+    }
+
+    if (!ALLOWED_DASHBOARD_ROLES.includes(profile.role)) {
+      return {
+        hasAccess: false,
+        error: `Acesso negado. Sua função (${profile.role}) não tem permissão para acessar o dashboard.`,
+      };
+    }
+
+    return { hasAccess: true, error: null };
+  };
 
   useEffect(() => {
     // Timeout de segurança: se o Supabase demorar muito, mostra a landing page
@@ -99,8 +130,22 @@ export default function App() {
     setUser(authUser);
     const { data: prof } = await supabase.from('profiles').select('*').eq('id', authUser.id).maybeSingle();
     setProfile(prof);
+
+    // ============================================
+    // CHECK ROLE BEFORE ALLOWING DASHBOARD ACCESS
+    // ============================================
+    const roleCheck = checkUserRole(prof);
+
+    if (!roleCheck.hasAccess) {
+      setAccessError(roleCheck.error);
+      setView('access-denied');
+      return;
+    }
+
+    // Only fetch brands if user has access
     const { data: bnd } = await supabase.from('brands').select('*').eq('owner_id', authUser.id).maybeSingle();
     setBrand(bnd);
+    setAccessError(null);
     setView('dashboard');
   };
 
@@ -123,6 +168,12 @@ export default function App() {
 
       {view === 'landing' ? (
         <LandingPage onOpenLogin={() => setIsLoginOpen(true)} />
+      ) : view === 'access-denied' ? (
+        <AccessDenied message={accessError} onLogout={() => {
+          supabase.auth.signOut();
+          setView('landing');
+          setAccessError(null);
+        }} />
       ) : (
         <Dashboard 
           profile={profile}
@@ -141,6 +192,34 @@ export default function App() {
 }
 
 // --- SUB-COMPONENTES (RESUMIDOS PARA FOCO NA LÓGICA) ---
+
+function AccessDenied({ message, onLogout }) {
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-black via-zinc-900 to-black flex items-center justify-center p-4">
+      <div className="max-w-md text-center">
+        <div className="mb-6 flex justify-center">
+          <AlertCircle size={64} className="text-red-500" />
+        </div>
+        <h1 className="text-3xl font-bold text-white mb-4">Acesso Negado</h1>
+        <p className="text-zinc-400 mb-8 text-lg">{message}</p>
+        <div className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-4 mb-8">
+          <p className="text-sm text-zinc-300">
+            <strong>Funções permitidas:</strong>
+            <br />
+            • Master Admin
+            <br />
+            • Brand Admin
+            <br />
+            • Influencer
+          </p>
+        </div>
+        <Button onClick={onLogout} variant="secondary" className="w-full">
+          <LogOut size={18} /> Sair e Voltar
+        </Button>
+      </div>
+    </div>
+  );
+}
 
 function LandingPage({ onOpenLogin }) {
   return (
