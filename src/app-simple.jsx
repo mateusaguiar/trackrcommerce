@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
 import { TrendingUp, Ticket, DollarSign, BarChart3, ShoppingBag, Users } from 'lucide-react';
-import { Button } from './components/Button';
-import { Modal } from './components/Modal';
-import { AuthForm } from './components/AuthForm';
+import { Button } from './components/Button.jsx';
+import { Modal } from './components/Modal.jsx';
+import { AuthForm } from './components/AuthForm.jsx';
 
 export default function App() {
   const [isLoginOpen, setIsLoginOpen] = useState(false);

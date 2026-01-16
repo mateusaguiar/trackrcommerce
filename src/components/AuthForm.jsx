@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { Button } from './Button';
-import { authFunctions, getErrorMessage, supabase } from '../lib/supabaseClient';
+import { Button } from './Button.jsx';
+import { authFunctions, getErrorMessage, supabase } from '../lib/supabaseClient.js';
 import { AlertCircle } from 'lucide-react';
 
 export const AuthForm = ({ onSuccess }) => {
