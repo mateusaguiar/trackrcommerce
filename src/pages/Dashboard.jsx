@@ -514,18 +514,24 @@ export default function Dashboard() {
                               <td className="py-4 px-4 text-sm">
                                 <span
                                   className={`px-3 py-1 rounded-full text-xs font-medium ${
-                                    conversion.status === 'confirmed'
+                                    conversion.status === 'paid' || conversion.status === 'confirmed'
                                       ? 'bg-emerald-500/10 text-emerald-400'
-                                      : conversion.status === 'pending'
-                                        ? 'bg-yellow-500/10 text-yellow-400'
-                                        : 'bg-red-500/10 text-red-400'
+                                      : conversion.status === 'completed'
+                                        ? 'bg-emerald-500/10 text-emerald-400'
+                                        : conversion.status === 'pending'
+                                          ? 'bg-yellow-500/10 text-yellow-400'
+                                          : 'bg-red-500/10 text-red-400'
                                   }`}
                                 >
-                                  {conversion.status === 'confirmed'
-                                    ? 'Confirmado'
-                                    : conversion.status === 'pending'
-                                      ? 'Pendente'
-                                      : 'Cancelado'}
+                                  {conversion.status === 'paid'
+                                    ? 'Pago'
+                                    : conversion.status === 'confirmed'
+                                      ? 'Confirmado'
+                                      : conversion.status === 'completed'
+                                        ? 'Completo'
+                                        : conversion.status === 'pending'
+                                          ? 'Pendente'
+                                          : 'Cancelado'}
                                 </span>
                               </td>
                               <td className="py-4 px-4 text-sm text-zinc-400">

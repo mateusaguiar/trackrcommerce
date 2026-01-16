@@ -380,8 +380,9 @@ export const dataFunctions = {
       if (influencerError) throw influencerError;
 
       // Calculate metrics from actual data
+      // Include all successful statuses: 'paid', 'confirmed', 'completed'
       const confirmedConversions = (conversions || []).filter(
-        conv => conv.status === 'confirmed' || conv.status === 'completed'
+        conv => conv.status === 'paid' || conv.status === 'confirmed' || conv.status === 'completed'
       );
 
       const total_revenue = confirmedConversions.reduce(
