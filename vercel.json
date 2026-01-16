@@ -1,11 +1,5 @@
 {
   "buildCommand": "npm ci && npm run build",
   "outputDirectory": "dist",
-  "devCommand": "vite",
-  "functions": {
-    "api/**/*.js": {
-      "memory": 1024,
-      "maxDuration": 60
-    }
-  }
+  "devCommand": "vite"
 }
