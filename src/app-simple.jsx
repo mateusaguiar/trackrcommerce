@@ -107,7 +107,7 @@ export default function App() {
       <Modal isOpen={isLoginOpen} onClose={() => setIsLoginOpen(false)} title="Acessar Painel">
         <AuthForm onSuccess={() => {
           setIsLoginOpen(false);
-          alert('Login bem-sucedido! (Demo mode - sem Supabase por enquanto)');
+          // Routing is handled by app-root.jsx which listens to auth state changes
         }} />
       </Modal>
     </div>
