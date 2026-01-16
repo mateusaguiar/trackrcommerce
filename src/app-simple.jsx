@@ -1,7 +1,12 @@
-import React from 'react';
-import { TrendingUp, Ticket, DollarSign, BarChart3, ShoppingBag, Users, Check } from 'lucide-react';
+import React, { useState } from 'react';
+import { TrendingUp, Ticket, DollarSign, BarChart3, ShoppingBag, Users } from 'lucide-react';
+import { Button } from './components/Button';
+import { Modal } from './components/Modal';
+import { AuthForm } from './components/AuthForm';
 
 export default function App() {
+  const [isLoginOpen, setIsLoginOpen] = useState(false);
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-black via-zinc-900 to-black text-white">
       {/* Header */}
@@ -10,9 +15,9 @@ export default function App() {
           <div className="flex items-center gap-2 font-bold text-2xl">
             <TrendingUp className="text-indigo-500" size={28} /> TrackrCommerce
           </div>
-          <button className="px-5 py-2.5 rounded-xl font-medium bg-transparent border border-zinc-700 hover:border-indigo-500 text-zinc-300 hover:text-white transition-all">
+          <Button variant="outline" onClick={() => setIsLoginOpen(true)}>
             Entrar
-          </button>
+          </Button>
         </div>
       </header>
 
@@ -20,21 +25,21 @@ export default function App() {
       <main className="pt-40">
         <div className="max-w-6xl mx-auto px-8 text-center pb-24">
           <div className="inline-block mb-6 px-4 py-2 bg-indigo-500/10 border border-indigo-500/20 rounded-full">
-            <p className="text-sm text-indigo-400 font-semibold">🚀 Plataforma Completa de Gestão</p>
+            <p className="text-sm text-indigo-400 font-semibold">🚀 Plataforma Completa para Gestão do seu e-Commerce</p>
           </div>
           <h1 className="text-5xl md:text-7xl font-black mb-6 leading-tight">
-            Gerencie suas métricas e <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-500 to-purple-500">influenciadores</span> em tempo real.
+            Acompanhe as métricas do seu <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-500 to-purple-500">e-Commerce</span> e dos seus <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-500 to-purple-500">influenciadores</span> em tempo real.
           </h1>
           <p className="text-xl text-zinc-400 mb-12 max-w-3xl mx-auto leading-relaxed">
             TrackrCommerce é a solução definitiva para e-commerce que vendem através de influenciadores. Gerencie seus dados, rastreie ROI e otimize sua estratégia.
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center mb-20">
-            <button className="py-4 px-10 text-lg bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-medium transition-all">
+            <Button className="py-4 px-10 text-lg" onClick={() => setIsLoginOpen(true)}>
               Testar Agora
-            </button>
-            <button className="py-4 px-10 text-lg bg-zinc-800 hover:bg-zinc-700 text-white rounded-xl font-medium border border-zinc-700 transition-all">
+            </Button>
+            <Button variant="secondary" className="py-4 px-10 text-lg">
               Saber Mais
-            </button>
+            </Button>
           </div>
         </div>
 
@@ -75,13 +80,9 @@ export default function App() {
               }`}>
                 <h3 className="text-2xl font-bold mb-2">{plan.name}</h3>
                 <div className="mb-6"><span className="text-4xl font-black">R$ {plan.price}</span><span className="text-zinc-400 text-sm">/mês</span></div>
-                <button className={`w-full px-5 py-2.5 rounded-xl font-medium transition-all ${
-                  plan.highlighted
-                    ? 'bg-indigo-600 hover:bg-indigo-700 text-white'
-                    : 'bg-zinc-800 hover:bg-zinc-700 text-white border border-zinc-700'
-                }`}>
+                <Button variant={plan.highlighted ? 'primary' : 'secondary'} className="w-full">
                   Começar
-                </button>
+                </Button>
               </div>
             ))}
           </div>
@@ -91,9 +92,9 @@ export default function App() {
         <div className="max-w-4xl mx-auto px-8 py-20 border-t border-zinc-800 text-center">
           <h2 className="text-4xl font-bold mb-6">Pronto para escalar seu e-commerce?</h2>
           <p className="text-xl text-zinc-400 mb-10">Junte-se a centenas de lojas usando TrackrCommerce.</p>
-          <button className="py-4 px-10 text-lg bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-medium transition-all">
+          <Button className="py-4 px-10 text-lg" onClick={() => setIsLoginOpen(true)}>
             Começar Teste Gratuito
-          </button>
+          </Button>
         </div>
       </main>
 
@@ -101,6 +102,14 @@ export default function App() {
       <footer className="border-t border-zinc-800 py-12 px-8 text-center text-zinc-500 text-sm">
         <p>© 2025 TrackrCommerce. Todos os direitos reservados.</p>
       </footer>
+
+      {/* Auth Modal */}
+      <Modal isOpen={isLoginOpen} onClose={() => setIsLoginOpen(false)} title="Acessar Painel">
+        <AuthForm onSuccess={() => {
+          setIsLoginOpen(false);
+          alert('Login bem-sucedido! (Demo mode - sem Supabase por enquanto)');
+        }} />
+      </Modal>
     </div>
   );
 }
