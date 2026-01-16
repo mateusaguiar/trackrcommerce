@@ -1,150 +1,130 @@
 import React, { useState, useEffect } from 'react';
 import { 
-  TrendingUp, 
-  Users, 
-  Ticket, 
-  DollarSign, 
-  LayoutDashboard, 
-  BarChart3, 
-  ChevronRight, 
-  X, 
-  LogOut,
-  AlertCircle
+  TrendingUp, Users, Ticket, DollarSign, LayoutDashboard, 
+  BarChart3, ChevronRight, Check, X, LogOut, ShoppingBag, 
+  Instagram, Wallet, AlertCircle 
 } from 'lucide-react';
 import { 
-  XAxis, 
-  YAxis, 
-  CartesianGrid, 
-  Tooltip, 
-  ResponsiveContainer, 
-  AreaChart, 
-  Area 
+  XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, 
+  AreaChart, Area 
 } from 'recharts';
+import { createClient } from '@supabase/supabase-js';
 
-/**
- * IMPORTANTE: Para o ambiente do Canvas/Preview, carregamos o Supabase via CDN.
- * No seu ambiente local (GitHub/Vercel), você pode usar:
- * import { createClient } from '@supabase/supabase-js';
- */
+// --- CONFIGURAÇÃO ---
+// No Vite/Vercel, as variáveis DEVEM começar com VITE_
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+
+// Inicializa o cliente fora do componente para evitar múltiplas instâncias
+const supabase = (supabaseUrl && supabaseAnonKey) 
+  ? createClient(supabaseUrl, supabaseAnonKey) 
+  : null;
+
+// --- COMPONENTES AUXILIARES ---
+
+const Modal = ({ isOpen, onClose, title, children }) => {
+  if (!isOpen) return null;
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md">
+      <div className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-md overflow-hidden shadow-2xl">
+        <div className="flex justify-between items-center p-6 border-b border-zinc-800">
+          <h3 className="text-xl font-bold text-white">{title}</h3>
+          <button onClick={onClose} className="text-zinc-400 hover:text-white"><X size={20} /></button>
+        </div>
+        <div className="p-6">{children}</div>
+      </div>
+    </div>
+  );
+};
+
+const Button = ({ children, variant = 'primary', className = '', ...props }) => {
+  const variants = {
+    primary: 'bg-indigo-600 hover:bg-indigo-700 text-white shadow-lg shadow-indigo-500/20',
+    secondary: 'bg-zinc-800 hover:bg-zinc-700 text-white border border-zinc-700',
+    outline: 'bg-transparent border border-zinc-700 hover:border-indigo-500 text-zinc-300 hover:text-white',
+  };
+  return (
+    <button className={`px-5 py-2.5 rounded-xl font-medium transition-all active:scale-95 flex items-center justify-center gap-2 ${variants[variant]} ${className}`} {...props}>
+      {children}
+    </button>
+  );
+};
+
+// --- APP ---
 
 export default function App() {
-  const [supabase, setSupabase] = useState(null);
   const [user, setUser] = useState(null);
   const [profile, setProfile] = useState(null);
   const [brand, setBrand] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [configError, setConfigError] = useState(false);
   const [isLoginOpen, setIsLoginOpen] = useState(false);
   const [view, setView] = useState('landing');
   const [activeTab, setActiveTab] = useState('overview');
 
-  // Variáveis de ambiente com detecção segura
-  const SUPABASE_URL = (typeof import.meta !== 'undefined' && import.meta.env?.VITE_SUPABASE_URL) || window.VITE_SUPABASE_URL || "";
-  const SUPABASE_ANON_KEY = (typeof import.meta !== 'undefined' && import.meta.env?.VITE_SUPABASE_ANON_KEY) || window.VITE_SUPABASE_ANON_KEY || "";
-
-  // 1. Inicialização do Cliente e Dependência
   useEffect(() => {
-    const loadSupabase = async () => {
-      // Se já houver um script de CDN, não adiciona outro
-      if (window.supabase) {
-        initializeClient();
-        return;
-      }
+    // Timeout de segurança: se o Supabase demorar muito, mostra a landing page
+    const timer = setTimeout(() => setLoading(false), 3000);
 
-      const script = document.createElement('script');
-      script.src = 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2';
-      script.async = true;
-      script.onload = () => initializeClient();
-      document.body.appendChild(script);
+    if (!supabase) {
+      setLoading(false);
+      return;
+    }
+
+    const checkUser = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.user) {
+        await fetchUserData(session.user);
+      }
+      setLoading(false);
+      clearTimeout(timer);
     };
 
-    const initializeClient = () => {
-      if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
-        setConfigError(true);
-        setLoading(false);
-        return;
-      }
+    checkUser();
 
-      try {
-        const client = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-        setSupabase(client);
-      } catch (err) {
-        console.error("Falha ao inicializar Supabase:", err);
-        setConfigError(true);
-        setLoading(false);
+    const { data: { subscription } } = supabase.auth.onAuthStateChanged((_event, session) => {
+      if (session?.user) fetchUserData(session.user);
+      else {
+        setUser(null);
+        setView('landing');
       }
+    });
+
+    return () => {
+      subscription.unsubscribe();
+      clearTimeout(timer);
     };
-
-    loadSupabase();
   }, []);
 
-  // 2. Gestão de Sessão
-  useEffect(() => {
-    if (!supabase) return;
-
-    const initSession = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      handleAuthChange(session?.user ?? null);
-      
-      const { data: { subscription } } = supabase.auth.onAuthStateChanged((_event, session) => {
-        handleAuthChange(session?.user ?? null);
-      });
-
-      return () => subscription.unsubscribe();
-    };
-    initSession();
-  }, [supabase]);
-
-  const handleAuthChange = async (authUser) => {
-    if (authUser && supabase) {
-      setUser(authUser);
-      try {
-        const { data: prof } = await supabase.from('profiles').select('*').eq('id', authUser.id).single();
-        setProfile(prof);
-
-        const { data: bnd } = await supabase.from('brands').select('*').eq('owner_id', authUser.id).limit(1).maybeSingle();
-        setBrand(bnd);
-        setView('dashboard');
-      } catch (e) {
-        console.error("Erro ao carregar dados do usuário:", e);
-      }
-    } else {
-      setUser(null);
-      setProfile(null);
-      setBrand(null);
-      setView('landing');
-    }
-    setLoading(false);
+  const fetchUserData = async (authUser) => {
+    setUser(authUser);
+    const { data: prof } = await supabase.from('profiles').select('*').eq('id', authUser.id).maybeSingle();
+    setProfile(prof);
+    const { data: bnd } = await supabase.from('brands').select('*').eq('owner_id', authUser.id).maybeSingle();
+    setBrand(bnd);
+    setView('dashboard');
   };
 
   if (loading) return (
     <div className="min-h-screen bg-black flex items-center justify-center">
-      <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-indigo-500"></div>
+      <div className="flex flex-col items-center gap-4">
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-indigo-500"></div>
+        <p className="text-zinc-500 text-sm font-medium animate-pulse">Iniciando TrackrCommerce...</p>
+      </div>
     </div>
   );
 
-  if (configError && !user) {
-    return (
-      <div className="min-h-screen bg-black flex items-center justify-center p-6 text-center">
-        <div className="max-w-md p-8 bg-zinc-900 border border-zinc-800 rounded-3xl">
-          <AlertCircle className="text-amber-500 mx-auto mb-4" size={48} />
-          <h2 className="text-xl font-bold text-white mb-2">Configuração do Supabase</h2>
-          <p className="text-zinc-400 text-sm mb-6">
-            Certifique-se de definir <code className="text-indigo-400">VITE_SUPABASE_URL</code> e <code className="text-indigo-400">VITE_SUPABASE_ANON_KEY</code> no seu arquivo .env ou no painel da Vercel.
-          </p>
-          <button onClick={() => window.location.reload()} className="w-full bg-indigo-600 p-3 rounded-xl font-bold">Recarregar</button>
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div className="min-h-screen bg-black text-zinc-100 font-sans">
+      {!supabase && (
+        <div className="bg-amber-500/10 border-b border-amber-500/20 p-2 text-center text-xs text-amber-500 font-bold">
+          Modo Demo: Variáveis do Supabase não configuradas no Vercel/GitHub.
+        </div>
+      )}
+
       {view === 'landing' ? (
         <LandingPage onOpenLogin={() => setIsLoginOpen(true)} />
       ) : (
         <Dashboard 
-          supabase={supabase}
           profile={profile}
           brand={brand}
           activeTab={activeTab} 
@@ -153,215 +133,182 @@ export default function App() {
         />
       )}
 
-      <Modal isOpen={isLoginOpen} onClose={() => setIsLoginOpen(false)} title="Acesso TrackrCommerce">
-        <AuthForm supabase={supabase} onSuccess={() => setIsLoginOpen(false)} />
+      <Modal isOpen={isLoginOpen} onClose={() => setIsLoginOpen(false)} title="Acessar Painel">
+        <AuthForm onSuccess={() => setIsLoginOpen(false)} />
       </Modal>
     </div>
   );
 }
 
-// --- COMPONENTES AUXILIARES ---
+// --- SUB-COMPONENTES (RESUMIDOS PARA FOCO NA LÓGICA) ---
 
-function AuthForm({ supabase, onSuccess }) {
+function LandingPage({ onOpenLogin }) {
+  return (
+    <div className="relative min-h-screen bg-gradient-to-br from-black via-zinc-900 to-black">
+      {/* Navigation */}
+      <header className="fixed w-full top-0 z-40 bg-black/80 backdrop-blur-md border-b border-zinc-800">
+        <div className="h-20 flex items-center justify-between px-8 max-w-7xl mx-auto w-full">
+          <div className="flex items-center gap-2 font-bold text-2xl text-white">
+            <TrendingUp className="text-indigo-500" size={28} /> TrackrCommerce
+          </div>
+          <Button onClick={onOpenLogin} variant="outline">Entrar</Button>
+        </div>
+      </header>
+
+      {/* Hero Section */}
+      <main className="pt-40">
+        <div className="max-w-6xl mx-auto px-8 text-center pb-24">
+          <div className="inline-block mb-6 px-4 py-2 bg-indigo-500/10 border border-indigo-500/20 rounded-full">
+            <p className="text-sm text-indigo-400 font-semibold">🚀 Plataforma Completa de Gestão</p>
+          </div>
+          <h1 className="text-5xl md:text-7xl font-black text-white mb-6 leading-tight">
+            Gerencie suas métricas e <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-500 to-purple-500">influenciadores</span> em tempo real.
+          </h1>
+          <p className="text-xl text-zinc-400 mb-12 max-w-3xl mx-auto leading-relaxed">
+            TrackrCommerce é a solução definitiva para e-commerce que vendem através de influenciadores. Gerencie seus dados de Nuvemshop, rastreie ROI de influenciadores e otimize sua estratégia de marketing.
+          </p>
+          <div className="flex flex-col sm:flex-row gap-4 justify-center mb-20">
+            <Button className="py-4 px-10 text-lg" onClick={onOpenLogin}>Testar Agora</Button>
+            <Button variant="secondary" className="py-4 px-10 text-lg">Saber Mais</Button>
+          </div>
+        </div>
+
+        {/* Features Section */}
+        <div className="max-w-6xl mx-auto px-8 py-20 border-t border-zinc-800">
+          <h2 className="text-4xl font-bold text-white text-center mb-16">Por que escolher TrackrCommerce?</h2>
+          <div className="grid md:grid-cols-3 gap-8 mb-20">
+            {[
+              {
+                icon: <Ticket size={24} />,
+                title: 'Rastreamento de Influenciadores',
+                desc: 'Saiba exatamente qual influenciador está gerando mais vendas com nosso sistema de tracking inteligente.'
+              },
+              {
+                icon: <DollarSign size={24} />,
+                title: 'ROI em Tempo Real',
+                desc: 'Visualize o retorno sobre investimento de cada campanha com influenciadores em segundos.'
+              },
+              {
+                icon: <BarChart3 size={24} />,
+                title: 'Análise Detalhada',
+                desc: 'Gráficos e relatórios completos sobre performance, conversões e métricas de engajamento.'
+              },
+              {
+                icon: <ShoppingBag size={24} />,
+                title: 'Integração Nuvemshop',
+                desc: 'Conecte diretamente com sua loja na Nuvemshop para sincronização automática de dados.'
+              },
+              {
+                icon: <Users size={24} />,
+                title: 'Gestão de Equipe',
+                desc: 'Convide colaboradores para gerenciar campanhas e ter visibilidade compartilhada.'
+              },
+              {
+                icon: <TrendingUp size={24} />,
+                title: 'Previsões e Tendências',
+                desc: 'IA-powered insights para prever tendências e otimizar suas campanhas futuras.'
+              }
+            ].map((feature, i) => (
+              <div key={i} className="p-6 bg-zinc-900/50 border border-zinc-800 hover:border-indigo-500/50 rounded-2xl transition-all hover:shadow-lg hover:shadow-indigo-500/10">
+                <div className="text-indigo-500 mb-4">{feature.icon}</div>
+                <h3 className="text-xl font-bold text-white mb-2">{feature.title}</h3>
+                <p className="text-zinc-400 text-sm">{feature.desc}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Pricing Section */}
+        <div className="max-w-6xl mx-auto px-8 py-20 border-t border-zinc-800">
+          <h2 className="text-4xl font-bold text-white text-center mb-16">Planos Simples e Transparentes</h2>
+          <div className="grid md:grid-cols-3 gap-8">
+            {[
+              { name: 'Starter', price: '29', features: ['Até 5 influenciadores', 'Dashboard básico', 'Suporte por email', 'Integração Nuvemshop'] },
+              { name: 'Pro', price: '79', features: ['Influenciadores ilimitados', 'Analytics avançada', 'Suporte prioritário', 'API access', 'Relatórios personalizados'], highlighted: true },
+              { name: 'Enterprise', price: 'Custom', features: ['Solução customizada', 'Suporte dedicado', 'Integração n8n', 'SSO/SAML', 'SLA garantido'] }
+            ].map((plan, i) => (
+              <div key={i} className={`p-8 rounded-2xl border transition-all ${
+                plan.highlighted 
+                  ? 'bg-gradient-to-b from-indigo-600/20 to-indigo-900/10 border-indigo-500/50 shadow-lg shadow-indigo-500/20 transform md:scale-105'
+                  : 'bg-zinc-900/30 border-zinc-800 hover:border-zinc-700'
+              }`}>
+                <h3 className="text-2xl font-bold text-white mb-2">{plan.name}</h3>
+                <div className="mb-6"><span className="text-4xl font-black text-white">R$ {plan.price}</span><span className="text-zinc-400 text-sm">/mês</span></div>
+                <ul className="space-y-3 mb-8">
+                  {plan.features.map((feature, j) => (
+                    <li key={j} className="flex items-center gap-2 text-zinc-300">
+                      <Check size={18} className="text-indigo-500" /> {feature}
+                    </li>
+                  ))}
+                </ul>
+                <Button className="w-full" variant={plan.highlighted ? 'primary' : 'secondary'}>Começar Agora</Button>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* CTA Section */}
+        <div className="max-w-4xl mx-auto px-8 py-20 border-t border-zinc-800 text-center">
+          <h2 className="text-4xl font-bold text-white mb-6">Pronto para escalar seu e-commerce?</h2>
+          <p className="text-xl text-zinc-400 mb-10">Junte-se a centenas de lojas que já estão usando TrackrCommerce para maximizar seu ROI.</p>
+          <Button className="py-4 px-10 text-lg" onClick={onOpenLogin}>Começar Teste Gratuito</Button>
+        </div>
+      </main>
+
+      {/* Footer */}
+      <footer className="border-t border-zinc-800 py-12 px-8 text-center text-zinc-500 text-sm">
+        <p>© 2025 TrackrCommerce. Todos os direitos reservados.</p>
+      </footer>
+    </div>
+  );
+}
+
+function AuthForm({ onSuccess }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [err, setErr] = useState('');
-  const [load, setLoad] = useState(false);
+  const [loading, setLoading] = useState(false);
 
   const handleLogin = async (e) => {
     e.preventDefault();
-    setLoad(true);
+    if (!supabase) return;
+    setLoading(true);
     const { error } = await supabase.auth.signInWithPassword({ email, password });
-    if (error) { setErr(error.message); setLoad(false); }
+    if (error) { alert(error.message); setLoading(false); }
     else onSuccess();
   };
 
   return (
     <form onSubmit={handleLogin} className="space-y-4">
-      {err && <div className="p-3 bg-red-500/10 border border-red-500/50 text-red-500 text-xs rounded-lg">{err}</div>}
-      <input type="email" placeholder="E-mail" className="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-2.5 outline-none focus:ring-2 focus:ring-indigo-500" value={email} onChange={(e) => setEmail(e.target.value)} required />
-      <input type="password" placeholder="Senha" className="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-2.5 outline-none focus:ring-2 focus:ring-indigo-500" value={password} onChange={(e) => setPassword(e.target.value)} required />
-      <button type="submit" disabled={load} className="w-full bg-indigo-600 p-3 rounded-xl font-bold disabled:opacity-50">{load ? 'Entrando...' : 'Entrar'}</button>
+      <input type="email" placeholder="E-mail" className="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-2.5 outline-none" value={email} onChange={e => setEmail(e.target.value)} />
+      <input type="password" placeholder="Senha" className="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-2.5 outline-none" value={password} onChange={e => setPassword(e.target.value)} />
+      <Button type="submit" disabled={loading} className="w-full">{loading ? 'Entrando...' : 'Entrar'}</Button>
     </form>
   );
 }
 
-function Dashboard({ supabase, profile, brand, activeTab, setActiveTab, onLogout }) {
-  const menu = [
-    { id: 'overview', label: 'Dashboard', icon: LayoutDashboard },
-    { id: 'influencers', label: 'Influencers', icon: Users },
-    { id: 'conversions', label: 'Conversões', icon: DollarSign },
-    { id: 'coupons', label: 'Cupons', icon: Ticket },
-  ];
-
+function Dashboard({ profile, brand, activeTab, setActiveTab, onLogout }) {
   return (
-    <div className="flex h-screen overflow-hidden">
-      <aside className="w-64 border-r border-zinc-800 p-6 flex flex-col bg-zinc-950/20">
-        <div className="flex items-center gap-2 mb-10 font-bold text-lg"><TrendingUp className="text-indigo-500"/> Trackr</div>
-        <nav className="flex-1 space-y-2">
-          {menu.map(item => (
-            <button key={item.id} onClick={() => setActiveTab(item.id)} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${activeTab === item.id ? 'bg-indigo-600/10 text-indigo-400 border border-indigo-500/20' : 'text-zinc-500 hover:text-white'}`}>
-              <item.icon size={18} /> <span className="text-sm font-semibold">{item.label}</span>
+    <div className="flex h-screen bg-black">
+      <aside className="w-64 border-r border-zinc-800 p-6 flex flex-col">
+        <div className="font-bold text-xl mb-10 text-white flex items-center gap-2"><TrendingUp size={20}/> Trackr</div>
+        <nav className="space-y-2 flex-1">
+          {['overview', 'influencers', 'conversions'].map(tab => (
+            <button key={tab} onClick={() => setActiveTab(tab)} className={`w-full text-left px-4 py-2 rounded-lg capitalize ${activeTab === tab ? 'bg-indigo-600 text-white' : 'text-zinc-500 hover:text-white'}`}>
+              {tab}
             </button>
           ))}
         </nav>
-        <div className="border-t border-zinc-800 pt-6">
-          <div className="flex items-center gap-3 mb-6">
-            <div className="w-8 h-8 rounded-full bg-zinc-800 flex items-center justify-center text-xs font-bold">{profile?.full_name?.[0]}</div>
-            <div className="flex-1 min-w-0">
-              <p className="text-xs font-bold truncate">{profile?.full_name || 'Usuário'}</p>
-              <p className="text-[10px] text-zinc-500 uppercase">{profile?.role}</p>
-            </div>
-          </div>
-          <button onClick={onLogout} className="flex items-center gap-2 text-zinc-600 hover:text-red-400 text-xs"><LogOut size={14}/> Sair</button>
+        <div className="pt-6 border-t border-zinc-800">
+           <p className="text-xs font-bold text-white mb-4">{profile?.full_name || 'Usuário'}</p>
+           <button onClick={onLogout} className="text-xs text-zinc-500 hover:text-red-400 flex items-center gap-2"><LogOut size={14}/> Sair</button>
         </div>
       </aside>
-      <main className="flex-1 overflow-y-auto p-10">
-        <header className="mb-10 flex justify-between items-start">
-          <div>
-            <h2 className="text-3xl font-bold text-white">{brand?.name || 'Marca'}</h2>
-            <p className="text-zinc-500 text-sm">Painel de Performance e Conversão</p>
-          </div>
-          <div className="flex items-center gap-2 bg-emerald-500/10 text-emerald-500 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest"><div className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse"></div> Sync On</div>
-        </header>
-
-        {activeTab === 'overview' && <Overview supabase={supabase} brandId={brand?.id} />}
-        {activeTab === 'influencers' && <Influencers supabase={supabase} brandId={brand?.id} />}
-        {activeTab === 'conversions' && <Conversions supabase={supabase} brandId={brand?.id} />}
-        {activeTab === 'coupons' && <div className="p-20 border border-dashed border-zinc-800 rounded-3xl text-center text-zinc-500">Gestão de Cupons Nuvemshop (Sincronizada via n8n)</div>}
+      <main className="flex-1 p-10 overflow-y-auto">
+        <h2 className="text-2xl font-bold text-white mb-2">{brand?.name || 'Visão Geral'}</h2>
+        <div className="bg-zinc-900 border border-zinc-800 p-10 rounded-3xl text-center">
+          <p className="text-zinc-500">Dados do Supabase serão renderizados aqui.</p>
+        </div>
       </main>
-    </div>
-  );
-}
-
-function Overview({ supabase, brandId }) {
-  const [data, setData] = useState({ rev: 0, comm: 0, count: 0 });
-
-  const fetch = async () => {
-    if (!brandId) return;
-    const { data: convs } = await supabase.from('conversions').select('*').eq('brand_id', brandId);
-    if (convs) {
-      setData({
-        rev: convs.reduce((a, b) => a + Number(b.order_amount), 0),
-        comm: convs.reduce((a, b) => a + Number(b.commission_amount), 0),
-        count: convs.length
-      });
-    }
-  };
-
-  useEffect(() => {
-    fetch();
-    const sub = supabase.channel('realtime').on('postgres_changes', { event: '*', schema: 'public', table: 'conversions' }, fetch).subscribe();
-    return () => supabase.removeChannel(sub);
-  }, [brandId]);
-
-  return (
-    <div className="space-y-8 animate-in fade-in duration-500">
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <StatCard label="Faturamento" value={`R$ ${data.rev.toLocaleString()}`} />
-        <StatCard label="Comissões" value={`R$ ${data.comm.toLocaleString()}`} color="text-indigo-400" />
-        <StatCard label="Vendas" value={data.count.toString()} />
-      </div>
-      <div className="bg-zinc-900 border border-zinc-800 p-8 rounded-3xl h-[350px]">
-        <ResponsiveContainer width="100%" height="100%">
-          <AreaChart data={[{n:'Seg',v:10},{n:'Ter',v:25},{n:'Qua',v:15},{n:'Qui',v:45},{n:'Sex',v:30}]}>
-            <defs><linearGradient id="c" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#6366f1" stopOpacity={0.3}/><stop offset="95%" stopColor="#6366f1" stopOpacity={0}/></linearGradient></defs>
-            <CartesianGrid strokeDasharray="3 3" stroke="#27272a" vertical={false} />
-            <XAxis dataKey="n" stroke="#52525b" fontSize={10} axisLine={false} tickLine={false} />
-            <Area type="monotone" dataKey="v" stroke="#6366f1" fill="url(#c)" strokeWidth={3} />
-          </AreaChart>
-        </ResponsiveContainer>
-      </div>
-    </div>
-  );
-}
-
-function StatCard({ label, value, color = "text-white" }) {
-  return (
-    <div className="bg-zinc-900 border border-zinc-800 p-8 rounded-3xl">
-      <p className="text-zinc-500 text-[10px] font-black uppercase tracking-widest mb-2">{label}</p>
-      <h3 className={`text-4xl font-black ${color}`}>{value}</h3>
-    </div>
-  );
-}
-
-function Influencers({ supabase, brandId }) {
-  const [list, setList] = useState([]);
-
-  useEffect(() => {
-    if (brandId) supabase.from('influencers').select('*').eq('brand_id', brandId).then(({data}) => setList(data || []));
-  }, [brandId]);
-
-  return (
-    <div className="bg-zinc-900 border border-zinc-800 rounded-3xl overflow-hidden">
-      <table className="w-full text-left text-sm">
-        <thead className="bg-zinc-950 text-zinc-500 uppercase text-[10px] font-black border-b border-zinc-800">
-          <tr><th className="p-6">Nome</th><th className="p-6">Handle</th><th className="p-6">Taxa</th><th className="p-6 text-right">Ações</th></tr>
-        </thead>
-        <tbody className="divide-y divide-zinc-800">
-          {list.map(i => (
-            <tr key={i.id} className="hover:bg-white/5 transition-colors">
-              <td className="p-6 font-bold text-white">{i.name}</td>
-              <td className="p-6 text-indigo-400 font-mono italic">{i.social_handle}</td>
-              <td className="p-6 text-zinc-300 font-bold">{i.commission_rate}%</td>
-              <td className="p-6 text-right"><ChevronRight size={18} className="text-zinc-700 ml-auto"/></td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  );
-}
-
-function Conversions({ supabase, brandId }) {
-  const [list, setList] = useState([]);
-
-  useEffect(() => {
-    if (brandId) supabase.from('conversions').select('*').eq('brand_id', brandId).order('sale_date', {ascending:false}).then(({data}) => setList(data || []));
-  }, [brandId]);
-
-  return (
-    <div className="bg-zinc-900 border border-zinc-800 rounded-3xl overflow-hidden">
-      <table className="w-full text-left text-sm">
-        <thead className="bg-zinc-950 text-zinc-500 uppercase text-[10px] font-black border-b border-zinc-800">
-          <tr><th className="p-6">Order ID</th><th className="p-6">Valor</th><th className="p-6">Comissão</th><th className="p-6">Status</th></tr>
-        </thead>
-        <tbody className="divide-y divide-zinc-800">
-          {list.map(c => (
-            <tr key={c.id} className="text-zinc-400">
-              <td className="p-6 font-mono text-white text-xs">#{c.order_id}</td>
-              <td className="p-6 font-bold">R$ {Number(c.order_amount).toLocaleString()}</td>
-              <td className="p-6 text-indigo-400 font-bold">R$ {Number(c.commission_amount).toLocaleString()}</td>
-              <td className="p-6">
-                <span className={`px-2 py-0.5 rounded text-[10px] font-black uppercase ${c.status === 'paid' ? 'bg-emerald-500/10 text-emerald-500' : 'bg-amber-500/10 text-amber-500'}`}>{c.status}</span>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  );
-}
-
-function LandingPage({ onOpenLogin }) {
-  return (
-    <div className="min-h-screen flex flex-col items-center justify-center p-8 text-center bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-zinc-900 to-black">
-      <h1 className="text-7xl font-black mb-8 tracking-tighter">Trackr<span className="text-indigo-600">Commerce.</span></h1>
-      <p className="text-xl text-zinc-500 max-w-xl mb-12">Potencialize suas vendas na Nuvemshop com gestão profissional de influenciadores e atribuição real.</p>
-      <button onClick={onOpenLogin} className="bg-white text-black px-12 py-4 rounded-2xl font-black text-lg hover:scale-105 transition-transform">Começar Agora</button>
-    </div>
-  );
-}
-
-function Modal({ isOpen, onClose, title, children }) {
-  if (!isOpen) return null;
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm" onClick={onClose}>
-      <div className="bg-zinc-900 border border-zinc-800 rounded-3xl w-full max-w-md p-8 relative shadow-2xl" onClick={e => e.stopPropagation()}>
-        <button onClick={onClose} className="absolute top-6 right-6 text-zinc-500 hover:text-white"><X size={20}/></button>
-        <h3 className="text-2xl font-bold mb-6">{title}</h3>
-        {children}
-      </div>
     </div>
   );
 }
