@@ -33,18 +33,20 @@ export default function Dashboard() {
         setError('');
 
         // Get current session
-        const session = await authFunctions.getSession();
-        if (!session?.user) {
+        const sessionResult = await authFunctions.getSession();
+        if (!sessionResult?.session?.user) {
           setError('User session not found');
           return;
         }
 
         // Get current profile
-        const profile = await authFunctions.getCurrentProfile();
-        if (!profile) {
+        const profileResult = await authFunctions.getCurrentProfile();
+        if (!profileResult?.profile) {
           setError('Profile not found');
           return;
         }
+
+        const profile = profileResult.profile;
 
         // Only show dashboard for brand_admin
         if (profile.role !== 'brand_admin') {
@@ -55,10 +57,10 @@ export default function Dashboard() {
         setUser(profile);
 
         // Get user's brands
-        const userBrands = await dataFunctions.getBrands(session.user.id);
-        if (userBrands && userBrands.length > 0) {
-          setBrands(userBrands);
-          setSelectedBrand(userBrands[0]);
+        const brandsResult = await dataFunctions.getBrands(sessionResult.session.user.id);
+        if (brandsResult.brands && brandsResult.brands.length > 0) {
+          setBrands(brandsResult.brands);
+          setSelectedBrand(brandsResult.brands[0]);
         } else {
           setError('No brands found for this user');
         }
@@ -83,21 +85,21 @@ export default function Dashboard() {
         setError('');
 
         // Get brand metrics
-        const brandMetrics = await dataFunctions.getBrandMetrics(selectedBrand.id);
-        setMetrics(brandMetrics);
+        const metricsResult = await dataFunctions.getBrandMetrics(selectedBrand.id);
+        setMetrics(metricsResult.metrics);
 
         // Get brand coupons
-        const brandCoupons = await dataFunctions.getBrandCoupons(selectedBrand.id);
-        setCoupons(brandCoupons || []);
+        const couponsResult = await dataFunctions.getBrandCoupons(selectedBrand.id);
+        setCoupons(couponsResult.coupons || []);
 
         // Get brand conversions with filter for last 30 days
         const thirtyDaysAgo = new Date();
         thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-        const brandConversions = await dataFunctions.getBrandConversions(
+        const conversionsResult = await dataFunctions.getBrandConversions(
           selectedBrand.id,
           { startDate: thirtyDaysAgo }
         );
-        setConversions(brandConversions || []);
+        setConversions(conversionsResult.conversions || []);
 
         setLoading(false);
       } catch (err) {

@@ -1,64 +1,12 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { TrendingUp, Ticket, DollarSign, BarChart3, ShoppingBag, Users } from 'lucide-react';
 import { Button } from './components/Button.jsx';
 import { Modal } from './components/Modal.jsx';
 import { AuthForm } from './components/AuthForm.jsx';
-import Dashboard from './pages/Dashboard.jsx';
-import { authFunctions } from './lib/supabaseClient.js';
 
 export default function App() {
   const [isLoginOpen, setIsLoginOpen] = useState(false);
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [loading, setLoading] = useState(true);
 
-  // Check authentication status on mount
-  useEffect(() => {
-    const checkAuth = async () => {
-      try {
-        const session = await authFunctions.getSession();
-        setIsAuthenticated(!!session?.user);
-      } catch (err) {
-        console.error('Auth check error:', err);
-        setIsAuthenticated(false);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    checkAuth();
-
-    // Listen to auth changes
-    const unsubscribe = authFunctions.onAuthStateChange((event, session) => {
-      setIsAuthenticated(!!session?.user);
-    });
-
-    return () => {
-      if (unsubscribe) {
-        unsubscribe();
-      }
-    };
-  }, []);
-
-  // Show loading screen
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-black via-zinc-900 to-black text-white flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin mb-4">
-            <TrendingUp size={40} className="mx-auto text-indigo-500" />
-          </div>
-          <p className="text-zinc-400">Carregando...</p>
-        </div>
-      </div>
-    );
-  }
-
-  // Show dashboard if authenticated
-  if (isAuthenticated) {
-    return <Dashboard />;
-  }
-
-  // Show landing page if not authenticated
   return (
     <div className="min-h-screen bg-gradient-to-br from-black via-zinc-900 to-black text-white">
       {/* Header */}
@@ -159,7 +107,7 @@ export default function App() {
       <Modal isOpen={isLoginOpen} onClose={() => setIsLoginOpen(false)} title="Acessar Painel">
         <AuthForm onSuccess={() => {
           setIsLoginOpen(false);
-          // Auth state will be updated automatically, triggering re-render
+          alert('Login bem-sucedido! (Demo mode - sem Supabase por enquanto)');
         }} />
       </Modal>
     </div>
