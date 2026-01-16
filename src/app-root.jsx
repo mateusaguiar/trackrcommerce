@@ -6,6 +6,9 @@ import { authFunctions } from './lib/supabaseClient.js';
 export default function AppRoot() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [hasCheckedAuth, setHasCheckedAuth] = useState(false);
+  
+  // Set to true to force show homepage for testing
+  const FORCE_HOMEPAGE = false;
 
   useEffect(() => {
     const checkAuth = async () => {
@@ -38,7 +41,7 @@ export default function AppRoot() {
 
   // Show dashboard if authenticated, otherwise show homepage
   // Always show homepage while checking auth to avoid UI flashing
-  if (isAuthenticated && hasCheckedAuth) {
+  if (!FORCE_HOMEPAGE && isAuthenticated && hasCheckedAuth) {
     try {
       return <Dashboard />;
     } catch (err) {
