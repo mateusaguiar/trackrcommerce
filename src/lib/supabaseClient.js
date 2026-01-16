@@ -164,7 +164,7 @@ export const dataFunctions = {
     }
   },
 
-  // Get coupons for a brand
+  // Get coupons for a brand with influencer details
   getBrandCoupons: async (brandId) => {
     if (!supabase) throw new Error('Supabase not configured');
     
@@ -172,20 +172,32 @@ export const dataFunctions = {
       const { data, error } = await supabase
         .from('coupons')
         .select(`
-          *,
-          influencers:influencer_id(id, name, social_handle, commission_rate)
+          id,
+          code,
+          discount_pct,
+          is_active,
+          created_at,
+          influencer_id,
+          influencers(id, name, social_handle, commission_rate)
         `)
         .eq('brand_id', brandId)
         .order('created_at', { ascending: false });
 
       if (error) throw error;
-      return { coupons: data || [], error: null };
+
+      // Transform data to flatten influencer name for easier access
+      const transformedData = (data || []).map(coupon => ({
+        ...coupon,
+        influencer_name: coupon.influencers?.name || 'Sem influenciador',
+      }));
+
+      return { coupons: transformedData, error: null };
     } catch (error) {
       return { coupons: [], error: error.message };
     }
   },
 
-  // Get conversions (sales) for a brand
+  // Get conversions (sales) for a brand with coupon details
   getBrandConversions: async (brandId, filters = {}) => {
     if (!supabase) throw new Error('Supabase not configured');
     
@@ -193,9 +205,15 @@ export const dataFunctions = {
       let query = supabase
         .from('conversions')
         .select(`
-          *,
-          coupons:coupon_id(code, influencer_id, discount_pct),
-          brands:brand_id(name)
+          id,
+          order_id,
+          order_amount,
+          commission_amount,
+          status,
+          sale_date,
+          order_is_real,
+          coupon_id,
+          coupons(id, code)
         `)
         .eq('brand_id', brandId);
 
@@ -210,7 +228,14 @@ export const dataFunctions = {
       const { data, error } = await query.order('sale_date', { ascending: false });
 
       if (error) throw error;
-      return { conversions: data || [], error: null };
+
+      // Transform data to flatten coupon code for easier access
+      const transformedData = (data || []).map(conversion => ({
+        ...conversion,
+        coupon_code: conversion.coupons?.code || 'N/A',
+      }));
+
+      return { conversions: transformedData, error: null };
     } catch (error) {
       return { conversions: [], error: error.message };
     }
@@ -224,9 +249,16 @@ export const dataFunctions = {
       let query = supabase
         .from('conversions')
         .select(`
-          *,
-          coupons:coupon_id(code, discount_pct, brand_id),
-          brands:brand_id(name)
+          id,
+          order_id,
+          order_amount,
+          commission_amount,
+          status,
+          sale_date,
+          coupon_id,
+          brand_id,
+          coupons(id, code, influencer_id),
+          brands(id, name)
         `)
         .eq('coupons.influencer_id', influencerId);
 
@@ -237,7 +269,15 @@ export const dataFunctions = {
       const { data, error } = await query.order('sale_date', { ascending: false });
 
       if (error) throw error;
-      return { conversions: data || [], error: null };
+
+      // Transform data to flatten coupon and brand info
+      const transformedData = (data || []).map(conversion => ({
+        ...conversion,
+        coupon_code: conversion.coupons?.code || 'N/A',
+        brand_name: conversion.brands?.name || 'N/A',
+      }));
+
+      return { conversions: transformedData, error: null };
     } catch (error) {
       return { conversions: [], error: error.message };
     }
@@ -310,19 +350,70 @@ export const dataFunctions = {
     }
   },
 
-  // Get brand metrics view
+  // Get brand metrics (computed from actual tables)
   getBrandMetrics: async (brandId) => {
     if (!supabase) throw new Error('Supabase not configured');
     
     try {
-      const { data, error } = await supabase
-        .from('v_brand_metrics')
-        .select('*')
-        .eq('id', brandId)
-        .single();
+      // Get all conversions for this brand
+      const { data: conversions, error: convError } = await supabase
+        .from('conversions')
+        .select('order_amount, commission_amount, status, order_is_real')
+        .eq('brand_id', brandId);
 
-      if (error) throw error;
-      return { metrics: data, error: null };
+      if (convError) throw convError;
+
+      // Get all coupons for this brand
+      const { data: coupons, error: couponError } = await supabase
+        .from('coupons')
+        .select('id, is_active')
+        .eq('brand_id', brandId);
+
+      if (couponError) throw couponError;
+
+      // Get all influencers for this brand
+      const { data: influencers, error: influencerError } = await supabase
+        .from('influencers')
+        .select('id')
+        .eq('brand_id', brandId);
+
+      if (influencerError) throw influencerError;
+
+      // Calculate metrics from actual data
+      const confirmedConversions = (conversions || []).filter(
+        conv => conv.status === 'confirmed' || conv.status === 'completed'
+      );
+
+      const total_revenue = confirmedConversions.reduce(
+        (sum, conv) => sum + parseFloat(conv.order_amount || 0),
+        0
+      );
+
+      const total_commissions = confirmedConversions.reduce(
+        (sum, conv) => sum + parseFloat(conv.commission_amount || 0),
+        0
+      );
+
+      const active_coupons = (coupons || []).filter(c => c.is_active === true).length;
+      const total_coupons = coupons?.length || 0;
+      const total_influencers = influencers?.length || 0;
+      const total_orders = confirmedConversions.length;
+
+      const metrics = {
+        id: brandId,
+        total_revenue,
+        total_commissions,
+        active_coupons,
+        total_coupons,
+        total_influencers,
+        total_orders,
+        commission_rate: total_revenue > 0 ? total_commissions / total_revenue : 0,
+        influencers_with_sales: new Set(
+          confirmedConversions.map(c => c.coupon_id).filter(Boolean)
+        ).size,
+      };
+
+      return { metrics, error: null };
     } catch (error) {
       return { metrics: null, error: error.message };
     }
