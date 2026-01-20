@@ -539,6 +539,91 @@ export const dataFunctions = {
     }
   },
 
+  // Get coupons with detailed metrics (usage count, total sales, last usage)
+  getCouponsWithMetrics: async (brandId, filters = {}) => {
+    if (!supabase) throw new Error('Supabase not configured');
+    
+    try {
+      // Get coupons with influencer details
+      let couponQuery = supabase
+        .from('coupons')
+        .select(`
+          id,
+          code,
+          discount_value,
+          discount_type,
+          is_active,
+          created_at,
+          influencer_id,
+          brand_id,
+          influencers(id, name, social_handle, commission_rate)
+        `)
+        .eq('brand_id', brandId);
+
+      // Apply date range filter if provided
+      if (filters.startDate) {
+        couponQuery = couponQuery.gte('created_at', filters.startDate.toISOString());
+      }
+      if (filters.endDate) {
+        couponQuery = couponQuery.lte('created_at', filters.endDate.toISOString());
+      }
+
+      const { data: coupons, error: couponError } = await couponQuery.order('created_at', { ascending: false });
+
+      if (couponError) throw couponError;
+
+      // Get metrics for each coupon
+      const couponsWithMetrics = await Promise.all(
+        (coupons || []).map(async (coupon) => {
+          // Get conversions for this coupon
+          let convQuery = supabase
+            .from('conversions')
+            .select('order_amount, status, sale_date, order_is_real')
+            .eq('coupon_id', coupon.id)
+            .eq('order_is_real', true);
+
+          // Apply date filters for conversions
+          if (filters.startDate) {
+            convQuery = convQuery.gte('sale_date', filters.startDate.toISOString());
+          }
+          if (filters.endDate) {
+            convQuery = convQuery.lte('sale_date', filters.endDate.toISOString());
+          }
+
+          const { data: conversions, error: convError } = await convQuery;
+
+          if (convError) throw convError;
+
+          // Calculate metrics
+          const realConversions = (conversions || []).filter(
+            c => c.status === 'paid' || c.status === 'confirmed' || c.status === 'completed'
+          );
+
+          const usage_count = realConversions.length;
+          const total_sales = realConversions.reduce(
+            (sum, conv) => sum + parseFloat(conv.order_amount || 0),
+            0
+          );
+          const last_usage = realConversions.length > 0
+            ? new Date(Math.max(...realConversions.map(c => new Date(c.sale_date).getTime())))
+            : null;
+
+          return {
+            ...coupon,
+            influencer_name: coupon.influencers?.name || 'Sem influenciador',
+            usage_count,
+            total_sales,
+            last_usage,
+          };
+        })
+      );
+
+      return { coupons: couponsWithMetrics, error: null };
+    } catch (error) {
+      return { coupons: [], error: error.message };
+    }
+  },
+
   // Get influencer performance
   getInfluencerPerformance: async (influencerId) => {
     if (!supabase) throw new Error('Supabase not configured');

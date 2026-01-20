@@ -148,8 +148,8 @@ export default function Dashboard() {
         });
         setMetrics(metricsResult.metrics);
 
-        // Get brand coupons with date filter
-        const couponsResult = await dataFunctions.getBrandCoupons(selectedBrand.id, {
+        // Get brand coupons with metrics and date filter
+        const couponsResult = await dataFunctions.getCouponsWithMetrics(selectedBrand.id, {
           startDate,
           endDate,
         });
@@ -502,6 +502,15 @@ export default function Dashboard() {
                               Desconto
                             </th>
                             <th className="text-left py-4 px-4 text-sm font-medium text-zinc-400">
+                              Usos
+                            </th>
+                            <th className="text-left py-4 px-4 text-sm font-medium text-zinc-400">
+                              Valor Total
+                            </th>
+                            <th className="text-left py-4 px-4 text-sm font-medium text-zinc-400">
+                              Último Uso
+                            </th>
+                            <th className="text-left py-4 px-4 text-sm font-medium text-zinc-400">
                               Status
                             </th>
                             <th className="text-left py-4 px-4 text-sm font-medium text-zinc-400">
@@ -527,6 +536,25 @@ export default function Dashboard() {
                                 {coupon.discount_type === 'absolute'
                                   ? `R$ ${coupon.discount_value}`
                                   : `${coupon.discount_value}%`}
+                              </td>
+                              <td className="py-4 px-4 text-sm font-medium text-zinc-300">
+                                {coupon.usage_count}
+                              </td>
+                              <td className="py-4 px-4 text-sm font-medium text-emerald-400">
+                                R$ {coupon.total_sales.toLocaleString('pt-BR', {
+                                  minimumFractionDigits: 2,
+                                })}
+                              </td>
+                              <td className="py-4 px-4 text-sm text-zinc-400">
+                                {coupon.last_usage
+                                  ? new Date(coupon.last_usage).toLocaleDateString('pt-BR', {
+                                      year: 'numeric',
+                                      month: '2-digit',
+                                      day: '2-digit',
+                                      hour: '2-digit',
+                                      minute: '2-digit',
+                                    })
+                                  : '-'}
                               </td>
                               <td className="py-4 px-4 text-sm">
                                 <span
