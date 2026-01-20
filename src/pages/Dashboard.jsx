@@ -414,7 +414,9 @@ export default function Dashboard() {
                                 {coupon.influencer_name || 'N/A'}
                               </td>
                               <td className="py-4 px-4 text-sm">
-                                {coupon.discount_pct}%
+                                {coupon.discount_type === 'absolute'
+                                  ? `R$ ${coupon.discount_value}`
+                                  : `${coupon.discount_value}%`}
                               </td>
                               <td className="py-4 px-4 text-sm">
                                 <span
@@ -493,7 +495,7 @@ export default function Dashboard() {
                             >
                               <td className="py-4 px-4">
                                 <span className="font-mono text-sm text-zinc-300">
-                                  {conversion.order_id}
+                                  {conversion.order_number || conversion.order_id}
                                 </span>
                               </td>
                               <td className="py-4 px-4 text-sm">
