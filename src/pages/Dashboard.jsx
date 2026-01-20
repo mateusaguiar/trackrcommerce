@@ -493,7 +493,7 @@ export default function Dashboard() {
                             >
                               <td className="py-4 px-4">
                                 <span className="font-mono text-sm text-zinc-300">
-                                  {conversion.order_id}
+                                  {conversion.order_number || conversion.order_id}
                                 </span>
                               </td>
                               <td className="py-4 px-4 text-sm">

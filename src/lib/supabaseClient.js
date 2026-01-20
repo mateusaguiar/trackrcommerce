@@ -147,15 +147,22 @@ export const authFunctions = {
 // ============================================
 
 export const dataFunctions = {
-  // Get user's brands
-  getBrands: async (userId) => {
+  // Get user's brands (excludes test/demo brands by default)
+  getBrands: async (userId, includeTestBrands = false) => {
     if (!supabase) throw new Error('Supabase not configured');
     
     try {
-      const { data, error } = await supabase
+      let query = supabase
         .from('brands')
         .select('*')
         .eq('owner_id', userId);
+
+      // Filter out test brands by default
+      if (!includeTestBrands) {
+        query = query.eq('is_real', true);
+      }
+
+      const { data, error } = await query;
 
       if (error) throw error;
       return { brands: data || [], error: null };
@@ -165,6 +172,7 @@ export const dataFunctions = {
   },
 
   // Get coupons for a brand with influencer details
+  // brand_admin can only view coupons from their brand (filtered by brand_id)
   getBrandCoupons: async (brandId) => {
     if (!supabase) throw new Error('Supabase not configured');
     
@@ -174,10 +182,12 @@ export const dataFunctions = {
         .select(`
           id,
           code,
-          discount_pct,
+          discount_value,
+          discount_type,
           is_active,
           created_at,
           influencer_id,
+          brand_id,
           influencers(id, name, social_handle, commission_rate)
         `)
         .eq('brand_id', brandId)
@@ -198,6 +208,7 @@ export const dataFunctions = {
   },
 
   // Get conversions (sales) for a brand with coupon details
+  // By default, filters out test orders (order_is_real = true)
   getBrandConversions: async (brandId, filters = {}) => {
     if (!supabase) throw new Error('Supabase not configured');
     
@@ -207,22 +218,28 @@ export const dataFunctions = {
         .select(`
           id,
           order_id,
+          order_number,
           order_amount,
           commission_amount,
           status,
           sale_date,
           order_is_real,
+          customer_id,
+          customer_email,
+          metadata,
           coupon_id,
           coupons(id, code)
         `)
         .eq('brand_id', brandId);
 
-      // Apply filters
+      // Filter out test orders by default (unless explicitly included)
+      if (filters.includeTestOrders !== true) {
+        query = query.eq('order_is_real', true);
+      }
+
+      // Apply status filter if provided
       if (filters.status) {
         query = query.eq('status', filters.status);
-      }
-      if (filters.onlyReal) {
-        query = query.eq('order_is_real', true);
       }
 
       const { data, error } = await query.order('sale_date', { ascending: false });
@@ -302,7 +319,7 @@ export const dataFunctions = {
   },
 
   // Create coupon (only for brand_admin or master)
-  createCoupon: async (brandId, influencerId, code, discountPct) => {
+  createCoupon: async (brandId, influencerId, code, discountValue, discountType = 'percentage') => {
     if (!supabase) throw new Error('Supabase not configured');
     
     try {
@@ -312,7 +329,8 @@ export const dataFunctions = {
           brand_id: brandId,
           influencer_id: influencerId,
           code,
-          discount_pct: discountPct,
+          discount_value: discountValue,
+          discount_type: discountType,
           is_active: true,
         })
         .select();
@@ -325,21 +343,40 @@ export const dataFunctions = {
   },
 
   // Log conversion/sale (from Nuvemshop webhook or manual)
-  logConversion: async (brandId, couponId, orderId, orderAmount, commissionAmount, metadata = {}) => {
+  logConversion: async (
+    brandId,
+    couponId,
+    orderId,
+    orderAmount,
+    commissionAmount,
+    options = {}
+  ) => {
     if (!supabase) throw new Error('Supabase not configured');
     
     try {
+      const {
+        metadata = {},
+        status = 'completed',
+        orderIsReal = true,
+        orderNumber = null,
+        customerId = null,
+        customerEmail = null,
+      } = options;
+
       const { data, error } = await supabase
         .from('conversions')
         .insert({
           brand_id: brandId,
           coupon_id: couponId,
           order_id: orderId,
+          order_number: orderNumber,
           order_amount: orderAmount,
           commission_amount: commissionAmount,
+          customer_id: customerId,
+          customer_email: customerEmail,
           metadata,
-          status: 'completed',
-          order_is_real: true,
+          status,
+          order_is_real: orderIsReal,
         })
         .select();
 
@@ -355,11 +392,12 @@ export const dataFunctions = {
     if (!supabase) throw new Error('Supabase not configured');
     
     try {
-      // Get all conversions for this brand
+      // Get all real conversions for this brand (excludes test orders)
       const { data: conversions, error: convError } = await supabase
         .from('conversions')
         .select('order_amount, commission_amount, status, order_is_real')
-        .eq('brand_id', brandId);
+        .eq('brand_id', brandId)
+        .eq('order_is_real', true);
 
       if (convError) throw convError;
 
@@ -417,6 +455,50 @@ export const dataFunctions = {
       return { metrics, error: null };
     } catch (error) {
       return { metrics: null, error: error.message };
+    }
+  },
+
+  // Get conversion with UTM data
+  getConversionUTM: async (orderId) => {
+    if (!supabase) throw new Error('Supabase not configured');
+    
+    try {
+      // Get conversion by order_id
+      const { data: conversion, error: convError } = await supabase
+        .from('conversions')
+        .select(`
+          id,
+          order_id,
+          order_number,
+          order_amount,
+          commission_amount,
+          status,
+          sale_date,
+          order_is_real,
+          customer_id,
+          customer_email,
+          brand_id,
+          coupon_id,
+          metadata
+        `)
+        .eq('order_id', orderId)
+        .maybeSingle();
+
+      if (convError) throw convError;
+      if (!conversion) return { conversion: null, utm: null, error: null };
+
+      // Get UTM data linked by order_id
+      const { data: utm, error: utmError } = await supabase
+        .from('utm_data')
+        .select('*')
+        .eq('order_id', orderId)
+        .maybeSingle();
+
+      if (utmError) throw utmError;
+
+      return { conversion, utm: utm || null, error: null };
+    } catch (error) {
+      return { conversion: null, utm: null, error: error.message };
     }
   },
 
