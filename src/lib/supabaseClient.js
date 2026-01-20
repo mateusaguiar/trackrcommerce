@@ -173,11 +173,11 @@ export const dataFunctions = {
 
   // Get coupons for a brand with influencer details
   // brand_admin can only view coupons from their brand (filtered by brand_id)
-  getBrandCoupons: async (brandId) => {
+  getBrandCoupons: async (brandId, filters = {}) => {
     if (!supabase) throw new Error('Supabase not configured');
     
     try {
-      const { data, error } = await supabase
+      let query = supabase
         .from('coupons')
         .select(`
           id,
@@ -190,8 +190,17 @@ export const dataFunctions = {
           brand_id,
           influencers(id, name, social_handle, commission_rate)
         `)
-        .eq('brand_id', brandId)
-        .order('created_at', { ascending: false });
+        .eq('brand_id', brandId);
+
+      // Apply date range filter if provided
+      if (filters.startDate) {
+        query = query.gte('created_at', filters.startDate.toISOString());
+      }
+      if (filters.endDate) {
+        query = query.lte('created_at', filters.endDate.toISOString());
+      }
+
+      const { data, error } = await query.order('created_at', { ascending: false });
 
       if (error) throw error;
 
@@ -240,6 +249,14 @@ export const dataFunctions = {
       // Apply status filter if provided
       if (filters.status) {
         query = query.eq('status', filters.status);
+      }
+
+      // Apply date range filter if provided
+      if (filters.startDate) {
+        query = query.gte('sale_date', filters.startDate.toISOString());
+      }
+      if (filters.endDate) {
+        query = query.lte('sale_date', filters.endDate.toISOString());
       }
 
       const { data, error } = await query.order('sale_date', { ascending: false });
@@ -388,24 +405,44 @@ export const dataFunctions = {
   },
 
   // Get brand metrics (computed from actual tables)
-  getBrandMetrics: async (brandId) => {
+  getBrandMetrics: async (brandId, filters = {}) => {
     if (!supabase) throw new Error('Supabase not configured');
     
     try {
       // Get all real conversions for this brand (excludes test orders)
-      const { data: conversions, error: convError } = await supabase
+      let convQuery = supabase
         .from('conversions')
         .select('order_amount, commission_amount, status, order_is_real')
         .eq('brand_id', brandId)
         .eq('order_is_real', true);
 
+      // Apply date range filter if provided
+      if (filters.startDate) {
+        convQuery = convQuery.gte('sale_date', filters.startDate.toISOString());
+      }
+      if (filters.endDate) {
+        convQuery = convQuery.lte('sale_date', filters.endDate.toISOString());
+      }
+
+      const { data: conversions, error: convError } = await convQuery;
+
       if (convError) throw convError;
 
       // Get all coupons for this brand
-      const { data: coupons, error: couponError } = await supabase
+      let couponQuery = supabase
         .from('coupons')
         .select('id, is_active')
         .eq('brand_id', brandId);
+
+      // Apply date range filter if provided
+      if (filters.startDate) {
+        couponQuery = couponQuery.gte('created_at', filters.startDate.toISOString());
+      }
+      if (filters.endDate) {
+        couponQuery = couponQuery.lte('created_at', filters.endDate.toISOString());
+      }
+
+      const { data: coupons, error: couponError } = await couponQuery;
 
       if (couponError) throw couponError;
 
