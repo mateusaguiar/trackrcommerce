@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { Analytics } from '@vercel/analytics/react';
 import HomePage from './app-simple.jsx';
 import Dashboard from './pages/Dashboard.jsx';
 import { authFunctions } from './lib/supabaseClient.js';
@@ -43,12 +44,27 @@ export default function AppRoot() {
   // Always show homepage while checking auth to avoid UI flashing
   if (!FORCE_HOMEPAGE && isAuthenticated && hasCheckedAuth) {
     try {
-      return <Dashboard />;
+      return (
+        <>
+          <Dashboard />
+          <Analytics />
+        </>
+      );
     } catch (err) {
       console.error('Dashboard error:', err);
-      return <HomePage />;
+      return (
+        <>
+          <HomePage />
+          <Analytics />
+        </>
+      );
     }
   }
 
-  return <HomePage />;
+  return (
+    <>
+      <HomePage />
+      <Analytics />
+    </>
+  );
 }
