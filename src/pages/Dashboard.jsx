@@ -24,6 +24,63 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [activeTab, setActiveTab] = useState('overview'); // overview, coupons, conversions
+  
+  // Date filter state (timezone: GMT-3 / America/São Paulo)
+  const [startDate, setStartDate] = useState(() => {
+    const d = new Date();
+    d.setDate(1); // First day of month
+    d.setHours(0, 0, 0, 0); // First minute of the day
+    return d;
+  });
+  const [endDate, setEndDate] = useState(new Date());
+
+  // Helper function to get start and end of day in GMT-3
+  const getDateInGMT3 = (date) => {
+    const offset = -3 * 60 * 60 * 1000; // GMT-3 in milliseconds
+    return new Date(date.getTime() + offset);
+  };
+
+  // Helper to format date for input (YYYY-MM-DD)
+  const formatDateForInput = (date) => {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+
+  // Helper to parse input date string to Date object
+  const parseInputDate = (dateString) => {
+    const [year, month, day] = dateString.split('-').map(Number);
+    return new Date(year, month - 1, day);
+  };
+
+  // Quick filter: Today
+  const handleFilterToday = () => {
+    const today = new Date();
+    setStartDate(new Date(today.getFullYear(), today.getMonth(), today.getDate()));
+    setEndDate(new Date(today.getFullYear(), today.getMonth(), today.getDate(), 23, 59, 59));
+  };
+
+  // Quick filter: This Month
+  const handleFilterThisMonth = () => {
+    const today = new Date();
+    const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
+    setStartDate(monthStart);
+    setEndDate(new Date(today.getFullYear(), today.getMonth() + 1, 0, 23, 59, 59));
+  };
+
+  // Handle start date change
+  const handleStartDateChange = (e) => {
+    const date = parseInputDate(e.target.value);
+    setStartDate(date);
+  };
+
+  // Handle end date change
+  const handleEndDateChange = (e) => {
+    const date = parseInputDate(e.target.value);
+    date.setHours(23, 59, 59); // Set to end of day
+    setEndDate(date);
+  };
 
   // Get current user and their brands on mount
   useEffect(() => {
@@ -75,7 +132,7 @@ export default function Dashboard() {
     initialize();
   }, []);
 
-  // Load brand data when selectedBrand changes
+  // Load brand data when selectedBrand or date filters change
   useEffect(() => {
     if (!selectedBrand) return;
 
@@ -84,20 +141,24 @@ export default function Dashboard() {
         setLoading(true);
         setError('');
 
-        // Get brand metrics
-        const metricsResult = await dataFunctions.getBrandMetrics(selectedBrand.id);
+        // Get brand metrics with date filter
+        const metricsResult = await dataFunctions.getBrandMetrics(selectedBrand.id, {
+          startDate,
+          endDate,
+        });
         setMetrics(metricsResult.metrics);
 
-        // Get brand coupons
-        const couponsResult = await dataFunctions.getBrandCoupons(selectedBrand.id);
+        // Get brand coupons with date filter
+        const couponsResult = await dataFunctions.getBrandCoupons(selectedBrand.id, {
+          startDate,
+          endDate,
+        });
         setCoupons(couponsResult.coupons || []);
 
-        // Get brand conversions with filter for last 30 days
-        const thirtyDaysAgo = new Date();
-        thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+        // Get brand conversions with date filter
         const conversionsResult = await dataFunctions.getBrandConversions(
           selectedBrand.id,
-          { startDate: thirtyDaysAgo }
+          { startDate, endDate }
         );
         setConversions(conversionsResult.conversions || []);
 
@@ -109,7 +170,7 @@ export default function Dashboard() {
     };
 
     loadBrandData();
-  }, [selectedBrand]);
+  }, [selectedBrand, startDate, endDate]);
 
   const handleLogout = async () => {
     try {
@@ -229,6 +290,55 @@ export default function Dashboard() {
                 <p className="text-zinc-400">
                   ID da Loja: {selectedBrand.nuvemshop_store_id}
                 </p>
+              </div>
+
+              {/* Date Filter Section */}
+              <div className="mb-8 bg-zinc-900/50 border border-zinc-800 rounded-lg p-6">
+                <div className="flex flex-col gap-4">
+                  {/* Filter Title and Quick Buttons */}
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-sm font-medium text-zinc-400">Período (GMT-3)</h3>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={handleFilterToday}
+                        className="px-3 py-1 text-xs font-medium bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 rounded hover:bg-indigo-500/20 transition"
+                      >
+                        Hoje
+                      </button>
+                      <button
+                        onClick={handleFilterThisMonth}
+                        className="px-3 py-1 text-xs font-medium bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 rounded hover:bg-indigo-500/20 transition"
+                      >
+                        Este Mês
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Date Inputs */}
+                  <div className="flex gap-4 items-end">
+                    <div className="flex flex-col gap-2">
+                      <label className="text-xs font-medium text-zinc-400">Data Inicial</label>
+                      <input
+                        type="date"
+                        value={formatDateForInput(startDate)}
+                        onChange={handleStartDateChange}
+                        className="px-3 py-2 bg-zinc-800 border border-zinc-700 rounded text-sm text-white focus:border-indigo-500 focus:outline-none transition"
+                      />
+                    </div>
+                    <div className="flex flex-col gap-2">
+                      <label className="text-xs font-medium text-zinc-400">Data Final</label>
+                      <input
+                        type="date"
+                        value={formatDateForInput(endDate)}
+                        onChange={handleEndDateChange}
+                        className="px-3 py-2 bg-zinc-800 border border-zinc-700 rounded text-sm text-white focus:border-indigo-500 focus:outline-none transition"
+                      />
+                    </div>
+                    <div className="text-xs text-zinc-500">
+                      {startDate.toLocaleDateString('pt-BR')} a {endDate.toLocaleDateString('pt-BR')}
+                    </div>
+                  </div>
+                </div>
               </div>
 
               {/* Tabs */}
