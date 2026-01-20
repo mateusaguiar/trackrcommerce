@@ -148,8 +148,8 @@ export default function Dashboard() {
         });
         setMetrics(metricsResult.metrics);
 
-        // Get brand coupons with date filter
-        const couponsResult = await dataFunctions.getBrandCoupons(selectedBrand.id, {
+        // Get brand coupons with metrics and date filter
+        const couponsResult = await dataFunctions.getCouponsWithMetrics(selectedBrand.id, {
           startDate,
           endDate,
         });
@@ -488,11 +488,39 @@ export default function Dashboard() {
                       <p className="text-zinc-400">Carregando cupons...</p>
                     </div>
                   ) : coupons.length > 0 ? (
-                    <div className="overflow-x-auto">
-                      <table className="w-full">
-                        <thead>
-                          <tr className="border-b border-zinc-700">
-                            <th className="text-left py-4 px-4 text-sm font-medium text-zinc-400">
+                    <div>
+                      {/* Subtotals Row */}
+                      <div className="mb-4 bg-zinc-800/40 border border-zinc-700 rounded-lg">
+                        <table className="w-full">
+                          <tbody>
+                            <tr>
+                              <td className="py-4 px-4 text-sm font-semibold text-zinc-300">
+                                TOTAL
+                              </td>
+                              <td className="py-4 px-4 text-sm"></td>
+                              <td className="py-4 px-4 text-sm"></td>
+                              <td className="py-4 px-4 text-sm font-semibold text-zinc-300">
+                                {coupons.reduce((sum, coupon) => sum + coupon.usage_count, 0)}
+                              </td>
+                              <td className="py-4 px-4 text-sm font-semibold text-emerald-400">
+                                R$ {coupons.reduce((sum, coupon) => sum + coupon.total_sales, 0).toLocaleString('pt-BR', {
+                                  minimumFractionDigits: 2,
+                                })}
+                              </td>
+                              <td className="py-4 px-4 text-sm"></td>
+                              <td className="py-4 px-4 text-sm"></td>
+                              <td className="py-4 px-4 text-sm"></td>
+                            </tr>
+                          </tbody>
+                        </table>
+                      </div>
+
+                      {/* Data Table */}
+                      <div className="overflow-x-auto">
+                        <table className="w-full">
+                          <thead>
+                            <tr className="border-b border-zinc-700">
+                              <th className="text-left py-4 px-4 text-sm font-medium text-zinc-400">
                               Código
                             </th>
                             <th className="text-left py-4 px-4 text-sm font-medium text-zinc-400">
@@ -500,6 +528,15 @@ export default function Dashboard() {
                             </th>
                             <th className="text-left py-4 px-4 text-sm font-medium text-zinc-400">
                               Desconto
+                            </th>
+                            <th className="text-left py-4 px-4 text-sm font-medium text-zinc-400">
+                              Usos
+                            </th>
+                            <th className="text-left py-4 px-4 text-sm font-medium text-zinc-400">
+                              Valor Total
+                            </th>
+                            <th className="text-left py-4 px-4 text-sm font-medium text-zinc-400">
+                              Último Uso
                             </th>
                             <th className="text-left py-4 px-4 text-sm font-medium text-zinc-400">
                               Status
@@ -528,6 +565,25 @@ export default function Dashboard() {
                                   ? `R$ ${coupon.discount_value}`
                                   : `${coupon.discount_value}%`}
                               </td>
+                              <td className="py-4 px-4 text-sm font-medium text-zinc-300">
+                                {coupon.usage_count}
+                              </td>
+                              <td className="py-4 px-4 text-sm font-medium text-emerald-400">
+                                R$ {coupon.total_sales.toLocaleString('pt-BR', {
+                                  minimumFractionDigits: 2,
+                                })}
+                              </td>
+                              <td className="py-4 px-4 text-sm text-zinc-400">
+                                {coupon.last_usage
+                                  ? new Date(coupon.last_usage).toLocaleDateString('pt-BR', {
+                                      year: 'numeric',
+                                      month: '2-digit',
+                                      day: '2-digit',
+                                      hour: '2-digit',
+                                      minute: '2-digit',
+                                    })
+                                  : '-'}
+                              </td>
                               <td className="py-4 px-4 text-sm">
                                 <span
                                   className={`px-3 py-1 rounded-full text-xs font-medium ${
@@ -546,6 +602,7 @@ export default function Dashboard() {
                           ))}
                         </tbody>
                       </table>
+                      </div>
                     </div>
                   ) : (
                     <div className="text-center py-12 text-zinc-400">
@@ -573,8 +630,36 @@ export default function Dashboard() {
                       <p className="text-zinc-400">Carregando vendas...</p>
                     </div>
                   ) : conversions.length > 0 ? (
-                    <div className="overflow-x-auto">
-                      <table className="w-full">
+                    <div>
+                      {/* Subtotals Row */}
+                      <div className="mb-4 bg-zinc-800/40 border border-zinc-700 rounded-lg">
+                        <table className="w-full">
+                          <tbody>
+                            <tr>
+                              <td className="py-4 px-4 text-sm font-semibold text-zinc-300">
+                                TOTAL
+                              </td>
+                              <td className="py-4 px-4 text-sm"></td>
+                              <td className="py-4 px-4 text-sm font-semibold text-emerald-400">
+                                R$ {conversions.reduce((sum, conv) => sum + parseFloat(conv.order_amount || 0), 0).toLocaleString('pt-BR', {
+                                  minimumFractionDigits: 2,
+                                })}
+                              </td>
+                              <td className="py-4 px-4 text-sm font-semibold text-emerald-400">
+                                R$ {conversions.reduce((sum, conv) => sum + parseFloat(conv.commission_amount || 0), 0).toLocaleString('pt-BR', {
+                                  minimumFractionDigits: 2,
+                                })}
+                              </td>
+                              <td className="py-4 px-4 text-sm"></td>
+                              <td className="py-4 px-4 text-sm"></td>
+                            </tr>
+                          </tbody>
+                        </table>
+                      </div>
+
+                      {/* Data Table */}
+                      <div className="overflow-x-auto">
+                        <table className="w-full">
                         <thead>
                           <tr className="border-b border-zinc-700">
                             <th className="text-left py-4 px-4 text-sm font-medium text-zinc-400">
@@ -653,6 +738,7 @@ export default function Dashboard() {
                           ))}
                         </tbody>
                       </table>
+                      </div>
                     </div>
                   ) : (
                     <div className="text-center py-12 text-zinc-400">
