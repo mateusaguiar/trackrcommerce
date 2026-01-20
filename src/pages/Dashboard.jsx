@@ -490,7 +490,7 @@ export default function Dashboard() {
                   ) : coupons.length > 0 ? (
                     <div>
                       {/* Subtotals Row */}
-                      <div className="mb-4 bg-zinc-800/40 border border-zinc-700 rounded-lg overflow-x-auto">
+                      <div className="mb-4 bg-zinc-800/40 border border-zinc-700 rounded-lg">
                         <table className="w-full">
                           <tbody>
                             <tr>
@@ -630,8 +630,36 @@ export default function Dashboard() {
                       <p className="text-zinc-400">Carregando vendas...</p>
                     </div>
                   ) : conversions.length > 0 ? (
-                    <div className="overflow-x-auto">
-                      <table className="w-full">
+                    <div>
+                      {/* Subtotals Row */}
+                      <div className="mb-4 bg-zinc-800/40 border border-zinc-700 rounded-lg">
+                        <table className="w-full">
+                          <tbody>
+                            <tr>
+                              <td className="py-4 px-4 text-sm font-semibold text-zinc-300">
+                                TOTAL
+                              </td>
+                              <td className="py-4 px-4 text-sm"></td>
+                              <td className="py-4 px-4 text-sm font-semibold text-emerald-400">
+                                R$ {conversions.reduce((sum, conv) => sum + parseFloat(conv.order_amount || 0), 0).toLocaleString('pt-BR', {
+                                  minimumFractionDigits: 2,
+                                })}
+                              </td>
+                              <td className="py-4 px-4 text-sm font-semibold text-emerald-400">
+                                R$ {conversions.reduce((sum, conv) => sum + parseFloat(conv.commission_amount || 0), 0).toLocaleString('pt-BR', {
+                                  minimumFractionDigits: 2,
+                                })}
+                              </td>
+                              <td className="py-4 px-4 text-sm"></td>
+                              <td className="py-4 px-4 text-sm"></td>
+                            </tr>
+                          </tbody>
+                        </table>
+                      </div>
+
+                      {/* Data Table */}
+                      <div className="overflow-x-auto">
+                        <table className="w-full">
                         <thead>
                           <tr className="border-b border-zinc-700">
                             <th className="text-left py-4 px-4 text-sm font-medium text-zinc-400">
@@ -710,6 +738,7 @@ export default function Dashboard() {
                           ))}
                         </tbody>
                       </table>
+                      </div>
                     </div>
                   ) : (
                     <div className="text-center py-12 text-zinc-400">
