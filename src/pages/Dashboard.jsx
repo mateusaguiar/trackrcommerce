@@ -678,8 +678,8 @@ export default function Dashboard() {
                   {/* Column Filter and Pagination Controls */}
                   {!loading && coupons.length > 0 && (
                     <div className="mb-4 space-y-4">
-                      {/* Filters Row */}
-                      <div className="flex items-center justify-between gap-4 flex-wrap">
+                      {/* Filters Column */}
+                      <div className="flex flex-col items-start gap-3">
                         {/* Coupon Code Filter */}
                         <div className="flex items-center gap-2">
                           <label className="text-sm text-zinc-400">Cupom:</label>
