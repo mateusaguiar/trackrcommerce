@@ -29,16 +29,26 @@ npm run preview
 
 ## 📋 Configuração
 
+### ⚠️ IMPORTANTE: Segurança
+
+Antes de começar, leia o [Guia de Segurança](SECURITY.md) para entender as melhores práticas de segurança.
+
+**NUNCA commit arquivos `.env.local` ou outros arquivos com credenciais reais!**
+
+### Configuração Local
+
 1. Copie o arquivo `.env.example` para `.env.local`:
    ```bash
    cp .env.example .env.local
    ```
 
-2. Configure suas credenciais Supabase:
+2. Configure suas credenciais Supabase em `.env.local`:
    - `VITE_SUPABASE_URL`: URL do seu projeto Supabase
    - `VITE_SUPABASE_ANON_KEY`: Chave anônima do Supabase
 
-Você pode encontrar essas informações em: `Supabase Dashboard > Settings > API`
+   Você pode encontrar essas informações em: `Supabase Dashboard > Settings > API`
+
+3. **Verifique** que `.env.local` está no `.gitignore` antes de commitar qualquer mudança
 
 ## 🌐 Deploy no Vercel
 
@@ -47,7 +57,12 @@ Você pode encontrar essas informações em: `Supabase Dashboard > Settings > AP
 3. Adicione as variáveis de ambiente no Vercel:
    - `VITE_SUPABASE_URL`
    - `VITE_SUPABASE_ANON_KEY`
+   
+   ⚠️ **IMPORTANTE**: Use credenciais de produção diferentes das de desenvolvimento!
+   
 4. Clique em "Deploy"
+
+Para mais informações sobre segurança, consulte [SECURITY.md](SECURITY.md).
 
 ## 📦 Stack Tecnológico
 
