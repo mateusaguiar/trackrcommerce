@@ -7,7 +7,6 @@ import {
   Users,
   ChevronDown,
   Plus,
-  Filter,
   RefreshCw,
   ArrowUp,
   ArrowDown,
@@ -51,6 +50,10 @@ export default function Dashboard() {
   // Sorting state for conversions
   const [conversionSortBy, setConversionSortBy] = useState('sale_date');
   const [conversionSortDirection, setConversionSortDirection] = useState('desc'); // 'asc' or 'desc'
+
+  // Filter state for conversions
+  const [selectedOrderId, setSelectedOrderId] = useState(''); // '' means show all
+  const [selectedConversionCoupon, setSelectedConversionCoupon] = useState(''); // '' means show all
 
   // Filter state for coupons
   const [selectedCouponCode, setSelectedCouponCode] = useState(''); // '' means show all
@@ -145,6 +148,16 @@ export default function Dashboard() {
       return 0;
     });
     return sorted;
+  };
+
+  // Helper function to filter conversions
+  const getFilteredConversions = (data) => {
+    return data.filter(conv => {
+      const idVal = conv.order_number || conv.order_id;
+      const matchesOrder = !selectedOrderId || idVal === selectedOrderId;
+      const matchesCoupon = !selectedConversionCoupon || conv.coupon_code === selectedConversionCoupon;
+      return matchesOrder && matchesCoupon;
+    });
   };
 
   // Helper function to sort conversions
@@ -269,8 +282,9 @@ export default function Dashboard() {
   );
   const totalCouponPages = Math.ceil(sortedCoupons.length / couponsPerPage);
 
-  // Pagination helpers for conversions (with sorting)
-  const sortedConversions = getSortedConversions(conversions);
+  // Pagination helpers for conversions (with filtering and sorting)
+  const filteredConversions = getFilteredConversions(conversions);
+  const sortedConversions = getSortedConversions(filteredConversions);
   const paginatedConversions = sortedConversions.slice(
     (conversionPage - 1) * conversionsPerPage,
     conversionPage * conversionsPerPage
@@ -969,51 +983,50 @@ export default function Dashboard() {
                 <div>
                   <div className="flex items-center justify-between mb-6">
                     <h2 className="text-2xl font-bold">Vendas Recentes</h2>
-                    <Button variant="outline">
-                      <Filter size={18} />
-                    </Button>
                   </div>
-
-                  {/* Column Filter and Pagination Controls */}
+                  {/* Filters Column */}
                   {!loading && conversions.length > 0 && (
-                    <div className="mb-4 flex items-center justify-between gap-4">
-                      {/* Rows per page */}
+                    <div className="mb-4 flex flex-col items-start gap-3">
+                      {/* Order ID Filter */}
                       <div className="flex items-center gap-2">
-                        <label className="text-sm text-zinc-400">Linhas por página:</label>
+                        <label className="text-sm text-zinc-400">ID do Pedido:</label>
                         <select
-                          value={conversionsPerPage}
+                          value={selectedOrderId}
                           onChange={(e) => {
-                            setConversionsPerPage(Number(e.target.value));
+                            setSelectedOrderId(e.target.value);
                             setConversionPage(1);
                           }}
                           className="px-3 py-1 bg-zinc-800 border border-zinc-700 rounded text-sm text-white focus:border-indigo-500 focus:outline-none"
                         >
-                          <option value={20}>20</option>
-                          <option value={50}>50</option>
-                          <option value={100}>100</option>
+                          <option value="">Todos</option>
+                          {[...new Set(conversions.map(c => c.order_number || c.order_id))]
+                            .filter(Boolean)
+                            .sort()
+                            .map((oid) => (
+                              <option key={oid} value={oid}>{oid}</option>
+                            ))}
                         </select>
                       </div>
 
-                      {/* Column Filter Dropdown */}
-                      <div className="relative group">
-                        <button className="px-3 py-1 bg-zinc-800 border border-zinc-700 rounded text-sm text-white hover:bg-zinc-700 transition">
-                          Colunas
-                        </button>
-                        <div className="absolute right-0 mt-0 w-48 bg-zinc-900 border border-zinc-700 rounded shadow-xl z-50 hidden group-hover:block">
-                          <div className="p-3 space-y-2">
-                            {conversionColumns.map((col) => (
-                              <label key={col.key} className="flex items-center gap-2 text-sm text-zinc-300 cursor-pointer hover:text-white">
-                                <input
-                                  type="checkbox"
-                                  checked={visibleConversionColumns.includes(col.key)}
-                                  onChange={() => toggleConversionColumn(col.key)}
-                                  className="rounded"
-                                />
-                                {col.label}
-                              </label>
+                      {/* Coupon Filter */}
+                      <div className="flex items-center gap-2">
+                        <label className="text-sm text-zinc-400">Cupom:</label>
+                        <select
+                          value={selectedConversionCoupon}
+                          onChange={(e) => {
+                            setSelectedConversionCoupon(e.target.value);
+                            setConversionPage(1);
+                          }}
+                          className="px-3 py-1 bg-zinc-800 border border-zinc-700 rounded text-sm text-white focus:border-indigo-500 focus:outline-none"
+                        >
+                          <option value="">Todos</option>
+                          {[...new Set(conversions.map(c => c.coupon_code))]
+                            .filter(Boolean)
+                            .sort()
+                            .map((code) => (
+                              <option key={code} value={code}>{code}</option>
                             ))}
-                          </div>
-                        </div>
+                        </select>
                       </div>
                     </div>
                   )}
@@ -1174,7 +1187,7 @@ export default function Dashboard() {
                       </div>
 
                       {/* Pagination Controls for Conversions */}
-                      <div className="mt-4 flex items-center justify-between">
+                      <div className="mt-4 flex items-center justify-between mb-6">
                         <span className="text-sm text-zinc-400">
                           Mostrando {paginatedConversions.length > 0 ? (conversionPage - 1) * conversionsPerPage + 1 : 0} a{' '}
                           {Math.min(conversionPage * conversionsPerPage, conversions.length)} de {conversions.length} vendas
@@ -1197,6 +1210,48 @@ export default function Dashboard() {
                           >
                             Próxima
                           </button>
+                        </div>
+                      </div>
+
+                      {/* Controls Row */}
+                      <div className="flex items-center justify-between gap-4">
+                        {/* Rows per page */}
+                        <div className="flex items-center gap-2">
+                          <label className="text-sm text-zinc-400">Linhas por página:</label>
+                          <select
+                            value={conversionsPerPage}
+                            onChange={(e) => {
+                              setConversionsPerPage(Number(e.target.value));
+                              setConversionPage(1);
+                            }}
+                            className="px-3 py-1 bg-zinc-800 border border-zinc-700 rounded text-sm text-white focus:border-indigo-500 focus:outline-none"
+                          >
+                            <option value={20}>20</option>
+                            <option value={50}>50</option>
+                            <option value={100}>100</option>
+                          </select>
+                        </div>
+
+                        {/* Column Filter Dropdown */}
+                        <div className="relative group">
+                          <button className="px-3 py-1 bg-zinc-800 border border-zinc-700 rounded text-sm text-white hover:bg-zinc-700 transition">
+                            Colunas
+                          </button>
+                          <div className="absolute right-0 mt-0 w-48 bg-zinc-900 border border-zinc-700 rounded shadow-xl z-50 hidden group-hover:block">
+                            <div className="p-3 space-y-2">
+                              {conversionColumns.map((col) => (
+                                <label key={col.key} className="flex items-center gap-2 text-sm text-zinc-300 cursor-pointer hover:text-white">
+                                  <input
+                                    type="checkbox"
+                                    checked={visibleConversionColumns.includes(col.key)}
+                                    onChange={() => toggleConversionColumn(col.key)}
+                                    className="rounded"
+                                  />
+                                  {col.label}
+                                </label>
+                              ))}
+                            </div>
+                          </div>
                         </div>
                       </div>
                     </div>
