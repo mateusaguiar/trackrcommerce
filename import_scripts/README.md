@@ -1,5 +1,15 @@
 # TrackrCommerce Data Import Guide
 
+## ⚠️ SECURITY WARNING
+
+**NEVER commit CSV files with real data or generated SQL files to version control!**
+
+All `sample_*.csv` files contain FAKE data for testing only. Generated `*_import.sql` files are automatically excluded from git.
+
+Read [SECURITY.md](../SECURITY.md) before proceeding with data imports.
+
+---
+
 ## Overview
 
 This guide explains how to import historical data from CSV spreadsheets into your TrackrCommerce database. The import process is divided into 6 steps, following database table dependencies.
