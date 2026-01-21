@@ -9,6 +9,8 @@ import {
   Plus,
   Filter,
   RefreshCw,
+  ArrowUp,
+  ArrowDown,
 } from 'lucide-react';
 import { Button } from '../components/Button.jsx';
 import { authFunctions, dataFunctions, getErrorMessage } from '../lib/supabaseClient.js';
@@ -34,6 +36,155 @@ export default function Dashboard() {
   });
   const [endDate, setEndDate] = useState(new Date());
 
+  // Pagination state for coupons
+  const [couponPage, setCouponPage] = useState(1);
+  const [couponsPerPage, setCouponsPerPage] = useState(20);
+  
+  // Pagination state for conversions
+  const [conversionPage, setConversionPage] = useState(1);
+  const [conversionsPerPage, setConversionsPerPage] = useState(20);
+
+  // Sorting state for coupons
+  const [couponSortBy, setCouponSortBy] = useState('created_at');
+  const [couponSortDirection, setCouponSortDirection] = useState('desc'); // 'asc' or 'desc'
+
+  // Sorting state for conversions
+  const [conversionSortBy, setConversionSortBy] = useState('sale_date');
+  const [conversionSortDirection, setConversionSortDirection] = useState('desc'); // 'asc' or 'desc'
+
+  // Column visibility state for coupons
+  const couponColumns = [
+    { key: 'code', label: 'Código' },
+    { key: 'influencer_name', label: 'Influenciador' },
+    { key: 'discount', label: 'Desconto' },
+    { key: 'usage_count', label: 'Usos' },
+    { key: 'total_sales', label: 'Valor Total' },
+    { key: 'last_usage', label: 'Último Uso' },
+    { key: 'is_active', label: 'Status' },
+    { key: 'created_at', label: 'Criado em' },
+  ];
+  const [visibleCouponColumns, setVisibleCouponColumns] = useState(
+    couponColumns.map(col => col.key)
+  );
+
+  // Column visibility state for conversions
+  const conversionColumns = [
+    { key: 'order_id', label: 'ID do Pedido' },
+    { key: 'coupon_code', label: 'Cupom' },
+    { key: 'order_amount', label: 'Valor' },
+    { key: 'commission_amount', label: 'Comissão' },
+    { key: 'status', label: 'Status' },
+    { key: 'sale_date', label: 'Data' },
+  ];
+  const [visibleConversionColumns, setVisibleConversionColumns] = useState(
+    conversionColumns.map(col => col.key)
+  );
+
+  // Toggle coupon column visibility
+  const toggleCouponColumn = (columnKey) => {
+    setVisibleCouponColumns(prev =>
+      prev.includes(columnKey)
+        ? prev.filter(key => key !== columnKey)
+        : [...prev, columnKey].sort((a, b) => {
+            const aIndex = couponColumns.findIndex(col => col.key === a);
+            const bIndex = couponColumns.findIndex(col => col.key === b);
+            return aIndex - bIndex;
+          })
+    );
+  };
+
+  // Toggle conversion column visibility
+  const toggleConversionColumn = (columnKey) => {
+    setVisibleConversionColumns(prev =>
+      prev.includes(columnKey)
+        ? prev.filter(key => key !== columnKey)
+        : [...prev, columnKey].sort((a, b) => {
+            const aIndex = conversionColumns.findIndex(col => col.key === a);
+            const bIndex = conversionColumns.findIndex(col => col.key === b);
+            return aIndex - bIndex;
+          })
+    );
+  };
+
+  // Helper function to sort coupons
+  const getSortedCoupons = (data) => {
+    const sorted = [...data].sort((a, b) => {
+      let aVal = a[couponSortBy];
+      let bVal = b[couponSortBy];
+
+      // Handle different data types
+      if (couponSortBy === 'created_at' || couponSortBy === 'last_usage') {
+        aVal = new Date(aVal || 0).getTime();
+        bVal = new Date(bVal || 0).getTime();
+      } else if (couponSortBy === 'usage_count' || couponSortBy === 'total_sales') {
+        aVal = Number(aVal || 0);
+        bVal = Number(bVal || 0);
+      } else if (couponSortBy === 'discount_value') {
+        aVal = Number(aVal || 0);
+        bVal = Number(bVal || 0);
+      } else {
+        aVal = String(aVal || '').toLowerCase();
+        bVal = String(bVal || '').toLowerCase();
+      }
+
+      if (aVal < bVal) return couponSortDirection === 'asc' ? -1 : 1;
+      if (aVal > bVal) return couponSortDirection === 'asc' ? 1 : -1;
+      return 0;
+    });
+    return sorted;
+  };
+
+  // Helper function to sort conversions
+  const getSortedConversions = (data) => {
+    const sorted = [...data].sort((a, b) => {
+      let aVal = a[conversionSortBy];
+      let bVal = b[conversionSortBy];
+
+      // Handle different data types
+      if (conversionSortBy === 'sale_date') {
+        aVal = new Date(aVal || 0).getTime();
+        bVal = new Date(bVal || 0).getTime();
+      } else if (conversionSortBy === 'order_amount' || conversionSortBy === 'commission_amount') {
+        aVal = Number(aVal || 0);
+        bVal = Number(bVal || 0);
+      } else {
+        aVal = String(aVal || '').toLowerCase();
+        bVal = String(bVal || '').toLowerCase();
+      }
+
+      if (aVal < bVal) return conversionSortDirection === 'asc' ? -1 : 1;
+      if (aVal > bVal) return conversionSortDirection === 'asc' ? 1 : -1;
+      return 0;
+    });
+    return sorted;
+  };
+
+  // Handle coupon column sort
+  const handleCouponSort = (columnKey) => {
+    if (couponSortBy === columnKey) {
+      // Toggle direction if same column
+      setCouponSortDirection(couponSortDirection === 'asc' ? 'desc' : 'asc');
+    } else {
+      // New column, default to ascending
+      setCouponSortBy(columnKey);
+      setCouponSortDirection('asc');
+    }
+    setCouponPage(1); // Reset to first page
+  };
+
+  // Handle conversion column sort
+  const handleConversionSort = (columnKey) => {
+    if (conversionSortBy === columnKey) {
+      // Toggle direction if same column
+      setConversionSortDirection(conversionSortDirection === 'asc' ? 'desc' : 'asc');
+    } else {
+      // New column, default to ascending
+      setConversionSortBy(columnKey);
+      setConversionSortDirection('asc');
+    }
+    setConversionPage(1); // Reset to first page
+  };
+
   // Helper function to get start and end of day in GMT-3
   const getDateInGMT3 = (date) => {
     const offset = -3 * 60 * 60 * 1000; // GMT-3 in milliseconds
@@ -52,6 +203,20 @@ export default function Dashboard() {
   const parseInputDate = (dateString) => {
     const [year, month, day] = dateString.split('-').map(Number);
     return new Date(year, month - 1, day);
+  };
+
+  // Helper to render sort icon for header
+  const renderSortIcon = (columnKey, isCoupon = true) => {
+    const isActive = isCoupon ? couponSortBy === columnKey : conversionSortBy === columnKey;
+    const direction = isCoupon ? couponSortDirection : conversionSortDirection;
+    
+    if (!isActive) {
+      return <span className="text-zinc-600 text-xs ml-1">↕</span>;
+    }
+    
+    return direction === 'asc' 
+      ? <ArrowUp size={14} className="inline ml-1" />
+      : <ArrowDown size={14} className="inline ml-1" />;
   };
 
   // Quick filter: Today
@@ -81,6 +246,22 @@ export default function Dashboard() {
     date.setHours(23, 59, 59); // Set to end of day
     setEndDate(date);
   };
+
+  // Pagination helpers for coupons (with sorting)
+  const sortedCoupons = getSortedCoupons(coupons);
+  const paginatedCoupons = sortedCoupons.slice(
+    (couponPage - 1) * couponsPerPage,
+    couponPage * couponsPerPage
+  );
+  const totalCouponPages = Math.ceil(sortedCoupons.length / couponsPerPage);
+
+  // Pagination helpers for conversions (with sorting)
+  const sortedConversions = getSortedConversions(conversions);
+  const paginatedConversions = sortedConversions.slice(
+    (conversionPage - 1) * conversionsPerPage,
+    conversionPage * conversionsPerPage
+  );
+  const totalConversionPages = Math.ceil(sortedConversions.length / conversionsPerPage);
 
   // Get current user and their brands on mount
   useEffect(() => {
@@ -480,6 +661,50 @@ export default function Dashboard() {
                     </Button>
                   </div>
 
+                  {/* Column Filter and Pagination Controls */}
+                  {!loading && coupons.length > 0 && (
+                    <div className="mb-4 flex items-center justify-between gap-4">
+                      {/* Rows per page */}
+                      <div className="flex items-center gap-2">
+                        <label className="text-sm text-zinc-400">Linhas por página:</label>
+                        <select
+                          value={couponsPerPage}
+                          onChange={(e) => {
+                            setCouponsPerPage(Number(e.target.value));
+                            setCouponPage(1);
+                          }}
+                          className="px-3 py-1 bg-zinc-800 border border-zinc-700 rounded text-sm text-white focus:border-indigo-500 focus:outline-none"
+                        >
+                          <option value={20}>20</option>
+                          <option value={50}>50</option>
+                          <option value={100}>100</option>
+                        </select>
+                      </div>
+
+                      {/* Column Filter Dropdown */}
+                      <div className="relative group">
+                        <button className="px-3 py-1 bg-zinc-800 border border-zinc-700 rounded text-sm text-white hover:bg-zinc-700 transition">
+                          Colunas
+                        </button>
+                        <div className="absolute right-0 mt-0 w-48 bg-zinc-900 border border-zinc-700 rounded shadow-xl z-50 hidden group-hover:block">
+                          <div className="p-3 space-y-2">
+                            {couponColumns.map((col) => (
+                              <label key={col.key} className="flex items-center gap-2 text-sm text-zinc-300 cursor-pointer hover:text-white">
+                                <input
+                                  type="checkbox"
+                                  checked={visibleCouponColumns.includes(col.key)}
+                                  onChange={() => toggleCouponColumn(col.key)}
+                                  className="rounded"
+                                />
+                                {col.label}
+                              </label>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
                   {loading ? (
                     <div className="text-center py-12">
                       <div className="animate-spin mb-4">
@@ -520,88 +745,162 @@ export default function Dashboard() {
                         <table className="w-full">
                           <thead>
                             <tr className="border-b border-zinc-700">
-                              <th className="text-left py-4 px-4 text-sm font-medium text-zinc-400">
-                              Código
-                            </th>
-                            <th className="text-left py-4 px-4 text-sm font-medium text-zinc-400">
-                              Influenciador
-                            </th>
-                            <th className="text-left py-4 px-4 text-sm font-medium text-zinc-400">
-                              Desconto
-                            </th>
-                            <th className="text-left py-4 px-4 text-sm font-medium text-zinc-400">
-                              Usos
-                            </th>
-                            <th className="text-left py-4 px-4 text-sm font-medium text-zinc-400">
-                              Valor Total
-                            </th>
-                            <th className="text-left py-4 px-4 text-sm font-medium text-zinc-400">
-                              Último Uso
-                            </th>
-                            <th className="text-left py-4 px-4 text-sm font-medium text-zinc-400">
-                              Status
-                            </th>
-                            <th className="text-left py-4 px-4 text-sm font-medium text-zinc-400">
-                              Criado em
-                            </th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {coupons.map((coupon) => (
-                            <tr
-                              key={coupon.id}
-                              className="border-b border-zinc-800 hover:bg-zinc-900/50 transition"
-                            >
-                              <td className="py-4 px-4">
-                                <span className="font-mono font-bold text-indigo-400">
-                                  {coupon.code}
-                                </span>
-                              </td>
-                              <td className="py-4 px-4 text-sm">
-                                {coupon.influencer_name || 'N/A'}
-                              </td>
-                              <td className="py-4 px-4 text-sm">
-                                {coupon.discount_type === 'absolute'
-                                  ? `R$ ${coupon.discount_value}`
-                                  : `${coupon.discount_value}%`}
-                              </td>
-                              <td className="py-4 px-4 text-sm font-medium text-zinc-300">
-                                {coupon.usage_count}
-                              </td>
-                              <td className="py-4 px-4 text-sm font-medium text-emerald-400">
-                                R$ {coupon.total_sales.toLocaleString('pt-BR', {
-                                  minimumFractionDigits: 2,
-                                })}
-                              </td>
-                              <td className="py-4 px-4 text-sm text-zinc-400">
-                                {coupon.last_usage
-                                  ? new Date(coupon.last_usage).toLocaleDateString('pt-BR', {
-                                      year: 'numeric',
-                                      month: '2-digit',
-                                      day: '2-digit',
-                                      hour: '2-digit',
-                                      minute: '2-digit',
-                                    })
-                                  : '-'}
-                              </td>
-                              <td className="py-4 px-4 text-sm">
-                                <span
-                                  className={`px-3 py-1 rounded-full text-xs font-medium ${
-                                    coupon.is_active
-                                      ? 'bg-emerald-500/10 text-emerald-400'
-                                      : 'bg-zinc-700/50 text-zinc-400'
-                                  }`}
+                              {visibleCouponColumns.includes('code') && (
+                                <th 
+                                  onClick={() => handleCouponSort('code')}
+                                  className="text-left py-4 px-4 text-sm font-medium text-zinc-400 cursor-pointer hover:text-zinc-200 transition"
                                 >
-                                  {coupon.is_active ? 'Ativo' : 'Inativo'}
-                                </span>
-                              </td>
-                              <td className="py-4 px-4 text-sm text-zinc-400">
-                                {new Date(coupon.created_at).toLocaleDateString('pt-BR')}
-                              </td>
+                                  Código {renderSortIcon('code', true)}
+                                </th>
+                              )}
+                              {visibleCouponColumns.includes('influencer_name') && (
+                                <th 
+                                  onClick={() => handleCouponSort('influencer_name')}
+                                  className="text-left py-4 px-4 text-sm font-medium text-zinc-400 cursor-pointer hover:text-zinc-200 transition"
+                                >
+                                  Influenciador {renderSortIcon('influencer_name', true)}
+                                </th>
+                              )}
+                              {visibleCouponColumns.includes('discount') && (
+                                <th 
+                                  onClick={() => handleCouponSort('discount_value')}
+                                  className="text-left py-4 px-4 text-sm font-medium text-zinc-400 cursor-pointer hover:text-zinc-200 transition"
+                                >
+                                  Desconto {renderSortIcon('discount_value', true)}
+                                </th>
+                              )}
+                              {visibleCouponColumns.includes('usage_count') && (
+                                <th 
+                                  onClick={() => handleCouponSort('usage_count')}
+                                  className="text-left py-4 px-4 text-sm font-medium text-zinc-400 cursor-pointer hover:text-zinc-200 transition"
+                                >
+                                  Usos {renderSortIcon('usage_count', true)}
+                                </th>
+                              )}
+                              {visibleCouponColumns.includes('total_sales') && (
+                                <th 
+                                  onClick={() => handleCouponSort('total_sales')}
+                                  className="text-left py-4 px-4 text-sm font-medium text-zinc-400 cursor-pointer hover:text-zinc-200 transition"
+                                >
+                                  Valor Total {renderSortIcon('total_sales', true)}
+                                </th>
+                              )}
+                              {visibleCouponColumns.includes('last_usage') && (
+                                <th 
+                                  onClick={() => handleCouponSort('last_usage')}
+                                  className="text-left py-4 px-4 text-sm font-medium text-zinc-400 cursor-pointer hover:text-zinc-200 transition"
+                                >
+                                  Último Uso {renderSortIcon('last_usage', true)}
+                                </th>
+                              )}
+                              {visibleCouponColumns.includes('is_active') && (
+                                <th 
+                                  onClick={() => handleCouponSort('is_active')}
+                                  className="text-left py-4 px-4 text-sm font-medium text-zinc-400 cursor-pointer hover:text-zinc-200 transition"
+                                >
+                                  Status {renderSortIcon('is_active', true)}
+                                </th>
+                              )}
+                              {visibleCouponColumns.includes('created_at') && (
+                                <th 
+                                  onClick={() => handleCouponSort('created_at')}
+                                  className="text-left py-4 px-4 text-sm font-medium text-zinc-400 cursor-pointer hover:text-zinc-200 transition"
+                                >
+                                  Criado em {renderSortIcon('created_at', true)}
+                                </th>
+                              )}
                             </tr>
-                          ))}
-                        </tbody>
-                      </table>
+                          </thead>
+                          <tbody>
+                            {paginatedCoupons.map((coupon) => (
+                              <tr key={coupon.id} className="border-b border-zinc-800 hover:bg-zinc-900/50 transition">
+                                {visibleCouponColumns.includes('code') && (
+                                  <td className="py-4 px-4">
+                                    <span className="font-mono font-bold text-indigo-400">{coupon.code}</span>
+                                  </td>
+                                )}
+                                {visibleCouponColumns.includes('influencer_name') && (
+                                  <td className="py-4 px-4 text-sm">{coupon.influencer_name || 'N/A'}</td>
+                                )}
+                                {visibleCouponColumns.includes('discount') && (
+                                  <td className="py-4 px-4 text-sm">
+                                    {coupon.discount_type === 'absolute'
+                                      ? `R$ ${coupon.discount_value}`
+                                      : `${coupon.discount_value}%`}
+                                  </td>
+                                )}
+                                {visibleCouponColumns.includes('usage_count') && (
+                                  <td className="py-4 px-4 text-sm font-medium text-zinc-300">{coupon.usage_count}</td>
+                                )}
+                                {visibleCouponColumns.includes('total_sales') && (
+                                  <td className="py-4 px-4 text-sm font-medium text-emerald-400">
+                                    R$ {coupon.total_sales.toLocaleString('pt-BR', {
+                                      minimumFractionDigits: 2,
+                                    })}
+                                  </td>
+                                )}
+                                {visibleCouponColumns.includes('last_usage') && (
+                                  <td className="py-4 px-4 text-sm text-zinc-400">
+                                    {coupon.last_usage
+                                      ? new Date(coupon.last_usage).toLocaleDateString('pt-BR', {
+                                          year: 'numeric',
+                                          month: '2-digit',
+                                          day: '2-digit',
+                                          hour: '2-digit',
+                                          minute: '2-digit',
+                                        })
+                                      : '-'}
+                                  </td>
+                                )}
+                                {visibleCouponColumns.includes('is_active') && (
+                                  <td className="py-4 px-4 text-sm">
+                                    <span
+                                      className={`px-3 py-1 rounded-full text-xs font-medium ${
+                                        coupon.is_active
+                                          ? 'bg-emerald-500/10 text-emerald-400'
+                                          : 'bg-zinc-700/50 text-zinc-400'
+                                      }`}
+                                    >
+                                      {coupon.is_active ? 'Ativo' : 'Inativo'}
+                                    </span>
+                                  </td>
+                                )}
+                                {visibleCouponColumns.includes('created_at') && (
+                                  <td className="py-4 px-4 text-sm text-zinc-400">
+                                    {new Date(coupon.created_at).toLocaleDateString('pt-BR')}
+                                  </td>
+                                )}
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+
+                      {/* Pagination Controls for Coupons */}
+                      <div className="mt-4 flex items-center justify-between">
+                        <span className="text-sm text-zinc-400">
+                          Mostrando {paginatedCoupons.length > 0 ? (couponPage - 1) * couponsPerPage + 1 : 0} a{' '}
+                          {Math.min(couponPage * couponsPerPage, coupons.length)} de {coupons.length} cupons
+                        </span>
+                        <div className="flex gap-2">
+                          <button
+                            disabled={couponPage === 1}
+                            onClick={() => setCouponPage(couponPage - 1)}
+                            className="px-3 py-1 bg-zinc-800 border border-zinc-700 rounded text-sm text-white disabled:opacity-50 disabled:cursor-not-allowed hover:bg-zinc-700 transition"
+                          >
+                            Anterior
+                          </button>
+                          <span className="px-3 py-1 text-sm text-white">
+                            Página {couponPage} de {totalCouponPages}
+                          </span>
+                          <button
+                            disabled={couponPage === totalCouponPages}
+                            onClick={() => setCouponPage(couponPage + 1)}
+                            className="px-3 py-1 bg-zinc-800 border border-zinc-700 rounded text-sm text-white disabled:opacity-50 disabled:cursor-not-allowed hover:bg-zinc-700 transition"
+                          >
+                            Próxima
+                          </button>
+                        </div>
                       </div>
                     </div>
                   ) : (
@@ -616,11 +915,55 @@ export default function Dashboard() {
               {activeTab === 'conversions' && (
                 <div>
                   <div className="flex items-center justify-between mb-6">
-                    <h2 className="text-2xl font-bold">Vendas Recentes (30 dias)</h2>
+                    <h2 className="text-2xl font-bold">Vendas Recentes</h2>
                     <Button variant="outline">
                       <Filter size={18} />
                     </Button>
                   </div>
+
+                  {/* Column Filter and Pagination Controls */}
+                  {!loading && conversions.length > 0 && (
+                    <div className="mb-4 flex items-center justify-between gap-4">
+                      {/* Rows per page */}
+                      <div className="flex items-center gap-2">
+                        <label className="text-sm text-zinc-400">Linhas por página:</label>
+                        <select
+                          value={conversionsPerPage}
+                          onChange={(e) => {
+                            setConversionsPerPage(Number(e.target.value));
+                            setConversionPage(1);
+                          }}
+                          className="px-3 py-1 bg-zinc-800 border border-zinc-700 rounded text-sm text-white focus:border-indigo-500 focus:outline-none"
+                        >
+                          <option value={20}>20</option>
+                          <option value={50}>50</option>
+                          <option value={100}>100</option>
+                        </select>
+                      </div>
+
+                      {/* Column Filter Dropdown */}
+                      <div className="relative group">
+                        <button className="px-3 py-1 bg-zinc-800 border border-zinc-700 rounded text-sm text-white hover:bg-zinc-700 transition">
+                          Colunas
+                        </button>
+                        <div className="absolute right-0 mt-0 w-48 bg-zinc-900 border border-zinc-700 rounded shadow-xl z-50 hidden group-hover:block">
+                          <div className="p-3 space-y-2">
+                            {conversionColumns.map((col) => (
+                              <label key={col.key} className="flex items-center gap-2 text-sm text-zinc-300 cursor-pointer hover:text-white">
+                                <input
+                                  type="checkbox"
+                                  checked={visibleConversionColumns.includes(col.key)}
+                                  onChange={() => toggleConversionColumn(col.key)}
+                                  className="rounded"
+                                />
+                                {col.label}
+                              </label>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
 
                   {loading ? (
                     <div className="text-center py-12">
@@ -660,84 +1003,148 @@ export default function Dashboard() {
                       {/* Data Table */}
                       <div className="overflow-x-auto">
                         <table className="w-full">
-                        <thead>
-                          <tr className="border-b border-zinc-700">
-                            <th className="text-left py-4 px-4 text-sm font-medium text-zinc-400">
-                              ID do Pedido
-                            </th>
-                            <th className="text-left py-4 px-4 text-sm font-medium text-zinc-400">
-                              Cupom
-                            </th>
-                            <th className="text-left py-4 px-4 text-sm font-medium text-zinc-400">
-                              Valor
-                            </th>
-                            <th className="text-left py-4 px-4 text-sm font-medium text-zinc-400">
-                              Comissão
-                            </th>
-                            <th className="text-left py-4 px-4 text-sm font-medium text-zinc-400">
-                              Status
-                            </th>
-                            <th className="text-left py-4 px-4 text-sm font-medium text-zinc-400">
-                              Data
-                            </th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {conversions.map((conversion) => (
-                            <tr
-                              key={conversion.id}
-                              className="border-b border-zinc-800 hover:bg-zinc-900/50 transition"
-                            >
-                              <td className="py-4 px-4">
-                                <span className="font-mono text-sm text-zinc-300">
-                                  {conversion.order_number || conversion.order_id}
-                                </span>
-                              </td>
-                              <td className="py-4 px-4 text-sm">
-                                <span className="font-mono text-indigo-400">
-                                  {conversion.coupon_code || 'N/A'}
-                                </span>
-                              </td>
-                              <td className="py-4 px-4 text-sm font-medium">
-                                R$ {conversion.order_amount.toLocaleString('pt-BR', {
-                                  minimumFractionDigits: 2,
-                                })}
-                              </td>
-                              <td className="py-4 px-4 text-sm font-medium text-emerald-400">
-                                R$ {conversion.commission_amount.toLocaleString('pt-BR', {
-                                  minimumFractionDigits: 2,
-                                })}
-                              </td>
-                              <td className="py-4 px-4 text-sm">
-                                <span
-                                  className={`px-3 py-1 rounded-full text-xs font-medium ${
-                                    conversion.status === 'paid' || conversion.status === 'confirmed'
-                                      ? 'bg-emerald-500/10 text-emerald-400'
-                                      : conversion.status === 'completed'
-                                        ? 'bg-emerald-500/10 text-emerald-400'
-                                        : conversion.status === 'pending'
-                                          ? 'bg-yellow-500/10 text-yellow-400'
-                                          : 'bg-red-500/10 text-red-400'
-                                  }`}
+                          <thead>
+                            <tr className="border-b border-zinc-700">
+                              {visibleConversionColumns.includes('order_id') && (
+                                <th 
+                                  onClick={() => handleConversionSort('order_id')}
+                                  className="text-left py-4 px-4 text-sm font-medium text-zinc-400 cursor-pointer hover:text-zinc-200 transition"
                                 >
-                                  {conversion.status === 'paid'
-                                    ? 'Pago'
-                                    : conversion.status === 'confirmed'
-                                      ? 'Confirmado'
-                                      : conversion.status === 'completed'
-                                        ? 'Completo'
-                                        : conversion.status === 'pending'
-                                          ? 'Pendente'
-                                          : 'Cancelado'}
-                                </span>
-                              </td>
-                              <td className="py-4 px-4 text-sm text-zinc-400">
-                                {new Date(conversion.sale_date).toLocaleDateString('pt-BR')}
-                              </td>
+                                  ID do Pedido {renderSortIcon('order_id', false)}
+                                </th>
+                              )}
+                              {visibleConversionColumns.includes('coupon_code') && (
+                                <th 
+                                  onClick={() => handleConversionSort('coupon_code')}
+                                  className="text-left py-4 px-4 text-sm font-medium text-zinc-400 cursor-pointer hover:text-zinc-200 transition"
+                                >
+                                  Cupom {renderSortIcon('coupon_code', false)}
+                                </th>
+                              )}
+                              {visibleConversionColumns.includes('order_amount') && (
+                                <th 
+                                  onClick={() => handleConversionSort('order_amount')}
+                                  className="text-left py-4 px-4 text-sm font-medium text-zinc-400 cursor-pointer hover:text-zinc-200 transition"
+                                >
+                                  Valor {renderSortIcon('order_amount', false)}
+                                </th>
+                              )}
+                              {visibleConversionColumns.includes('commission_amount') && (
+                                <th 
+                                  onClick={() => handleConversionSort('commission_amount')}
+                                  className="text-left py-4 px-4 text-sm font-medium text-zinc-400 cursor-pointer hover:text-zinc-200 transition"
+                                >
+                                  Comissão {renderSortIcon('commission_amount', false)}
+                                </th>
+                              )}
+                              {visibleConversionColumns.includes('status') && (
+                                <th 
+                                  onClick={() => handleConversionSort('status')}
+                                  className="text-left py-4 px-4 text-sm font-medium text-zinc-400 cursor-pointer hover:text-zinc-200 transition"
+                                >
+                                  Status {renderSortIcon('status', false)}
+                                </th>
+                              )}
+                              {visibleConversionColumns.includes('sale_date') && (
+                                <th 
+                                  onClick={() => handleConversionSort('sale_date')}
+                                  className="text-left py-4 px-4 text-sm font-medium text-zinc-400 cursor-pointer hover:text-zinc-200 transition"
+                                >
+                                  Data {renderSortIcon('sale_date', false)}
+                                </th>
+                              )}
                             </tr>
-                          ))}
-                        </tbody>
-                      </table>
+                          </thead>
+                          <tbody>
+                            {paginatedConversions.map((conversion) => (
+                              <tr key={conversion.id} className="border-b border-zinc-800 hover:bg-zinc-900/50 transition">
+                                {visibleConversionColumns.includes('order_id') && (
+                                  <td className="py-4 px-4">
+                                    <span className="font-mono text-sm text-zinc-300">
+                                      {conversion.order_number || conversion.order_id}
+                                    </span>
+                                  </td>
+                                )}
+                                {visibleConversionColumns.includes('coupon_code') && (
+                                  <td className="py-4 px-4 text-sm">
+                                    <span className="font-mono text-indigo-400">{conversion.coupon_code || 'N/A'}</span>
+                                  </td>
+                                )}
+                                {visibleConversionColumns.includes('order_amount') && (
+                                  <td className="py-4 px-4 text-sm font-medium">
+                                    R$ {conversion.order_amount.toLocaleString('pt-BR', {
+                                      minimumFractionDigits: 2,
+                                    })}
+                                  </td>
+                                )}
+                                {visibleConversionColumns.includes('commission_amount') && (
+                                  <td className="py-4 px-4 text-sm font-medium text-emerald-400">
+                                    R$ {conversion.commission_amount.toLocaleString('pt-BR', {
+                                      minimumFractionDigits: 2,
+                                    })}
+                                  </td>
+                                )}
+                                {visibleConversionColumns.includes('status') && (
+                                  <td className="py-4 px-4 text-sm">
+                                    <span
+                                      className={`px-3 py-1 rounded-full text-xs font-medium ${
+                                        conversion.status === 'paid' || conversion.status === 'confirmed'
+                                          ? 'bg-emerald-500/10 text-emerald-400'
+                                          : conversion.status === 'completed'
+                                            ? 'bg-emerald-500/10 text-emerald-400'
+                                            : conversion.status === 'pending'
+                                              ? 'bg-yellow-500/10 text-yellow-400'
+                                              : 'bg-red-500/10 text-red-400'
+                                      }`}
+                                    >
+                                      {conversion.status === 'paid'
+                                        ? 'Pago'
+                                        : conversion.status === 'confirmed'
+                                          ? 'Confirmado'
+                                          : conversion.status === 'completed'
+                                            ? 'Completo'
+                                            : conversion.status === 'pending'
+                                              ? 'Pendente'
+                                              : 'Cancelado'}
+                                    </span>
+                                  </td>
+                                )}
+                                {visibleConversionColumns.includes('sale_date') && (
+                                  <td className="py-4 px-4 text-sm text-zinc-400">
+                                    {new Date(conversion.sale_date).toLocaleDateString('pt-BR')}
+                                  </td>
+                                )}
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+
+                      {/* Pagination Controls for Conversions */}
+                      <div className="mt-4 flex items-center justify-between">
+                        <span className="text-sm text-zinc-400">
+                          Mostrando {paginatedConversions.length > 0 ? (conversionPage - 1) * conversionsPerPage + 1 : 0} a{' '}
+                          {Math.min(conversionPage * conversionsPerPage, conversions.length)} de {conversions.length} vendas
+                        </span>
+                        <div className="flex gap-2">
+                          <button
+                            disabled={conversionPage === 1}
+                            onClick={() => setConversionPage(conversionPage - 1)}
+                            className="px-3 py-1 bg-zinc-800 border border-zinc-700 rounded text-sm text-white disabled:opacity-50 disabled:cursor-not-allowed hover:bg-zinc-700 transition"
+                          >
+                            Anterior
+                          </button>
+                          <span className="px-3 py-1 text-sm text-white">
+                            Página {conversionPage} de {totalConversionPages}
+                          </span>
+                          <button
+                            disabled={conversionPage === totalConversionPages}
+                            onClick={() => setConversionPage(conversionPage + 1)}
+                            className="px-3 py-1 bg-zinc-800 border border-zinc-700 rounded text-sm text-white disabled:opacity-50 disabled:cursor-not-allowed hover:bg-zinc-700 transition"
+                          >
+                            Próxima
+                          </button>
+                        </div>
                       </div>
                     </div>
                   ) : (
