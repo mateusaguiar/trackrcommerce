@@ -677,86 +677,41 @@ export default function Dashboard() {
 
                   {/* Column Filter and Pagination Controls */}
                   {!loading && coupons.length > 0 && (
-                    <div className="mb-4 space-y-4">
-                      {/* Filters Column */}
-                      <div className="flex flex-col items-start gap-3">
-                        {/* Coupon Code Filter */}
-                        <div className="flex items-center gap-2">
-                          <label className="text-sm text-zinc-400">Cupom:</label>
-                          <select
-                            value={selectedCouponCode}
-                            onChange={(e) => {
-                              setSelectedCouponCode(e.target.value);
-                              setCouponPage(1);
-                            }}
-                            className="px-3 py-1 bg-zinc-800 border border-zinc-700 rounded text-sm text-white focus:border-indigo-500 focus:outline-none"
-                          >
-                            <option value="">Todos</option>
-                            {[...new Set(coupons.map(c => c.code))].sort().map((code) => (
-                              <option key={code} value={code}>{code}</option>
-                            ))}
-                          </select>
-                        </div>
-
-                        {/* Influencer Filter */}
-                        <div className="flex items-center gap-2">
-                          <label className="text-sm text-zinc-400">Influenciador:</label>
-                          <select
-                            value={selectedInfluencer}
-                            onChange={(e) => {
-                              setSelectedInfluencer(e.target.value);
-                              setCouponPage(1);
-                            }}
-                            className="px-3 py-1 bg-zinc-800 border border-zinc-700 rounded text-sm text-white focus:border-indigo-500 focus:outline-none"
-                          >
-                            <option value="">Todos</option>
-                            {[...new Set(coupons.map(c => c.influencer_name))].filter(Boolean).sort().map((influencer) => (
-                              <option key={influencer} value={influencer}>{influencer}</option>
-                            ))}
-                          </select>
-                        </div>
+                    <div className="mb-4 flex flex-col items-start gap-3">
+                      {/* Coupon Code Filter */}
+                      <div className="flex items-center gap-2">
+                        <label className="text-sm text-zinc-400">Cupom:</label>
+                        <select
+                          value={selectedCouponCode}
+                          onChange={(e) => {
+                            setSelectedCouponCode(e.target.value);
+                            setCouponPage(1);
+                          }}
+                          className="px-3 py-1 bg-zinc-800 border border-zinc-700 rounded text-sm text-white focus:border-indigo-500 focus:outline-none"
+                        >
+                          <option value="">Todos</option>
+                          {[...new Set(coupons.map(c => c.code))].sort().map((code) => (
+                            <option key={code} value={code}>{code}</option>
+                          ))}
+                        </select>
                       </div>
 
-                      {/* Controls Row */}
-                      <div className="flex items-center justify-between gap-4">
-                        {/* Rows per page */}
-                        <div className="flex items-center gap-2">
-                          <label className="text-sm text-zinc-400">Linhas por página:</label>
-                          <select
-                            value={couponsPerPage}
-                            onChange={(e) => {
-                              setCouponsPerPage(Number(e.target.value));
-                              setCouponPage(1);
-                            }}
-                            className="px-3 py-1 bg-zinc-800 border border-zinc-700 rounded text-sm text-white focus:border-indigo-500 focus:outline-none"
-                          >
-                            <option value={20}>20</option>
-                            <option value={50}>50</option>
-                            <option value={100}>100</option>
-                          </select>
-                        </div>
-
-                        {/* Column Filter Dropdown */}
-                        <div className="relative group">
-                          <button className="px-3 py-1 bg-zinc-800 border border-zinc-700 rounded text-sm text-white hover:bg-zinc-700 transition">
-                            Colunas
-                          </button>
-                          <div className="absolute right-0 mt-0 w-48 bg-zinc-900 border border-zinc-700 rounded shadow-xl z-50 hidden group-hover:block">
-                            <div className="p-3 space-y-2">
-                              {couponColumns.map((col) => (
-                                <label key={col.key} className="flex items-center gap-2 text-sm text-zinc-300 cursor-pointer hover:text-white">
-                                  <input
-                                    type="checkbox"
-                                    checked={visibleCouponColumns.includes(col.key)}
-                                    onChange={() => toggleCouponColumn(col.key)}
-                                    className="rounded"
-                                  />
-                                  {col.label}
-                                </label>
-                              ))}
-                            </div>
-                          </div>
-                        </div>
+                      {/* Influencer Filter */}
+                      <div className="flex items-center gap-2">
+                        <label className="text-sm text-zinc-400">Influenciador:</label>
+                        <select
+                          value={selectedInfluencer}
+                          onChange={(e) => {
+                            setSelectedInfluencer(e.target.value);
+                            setCouponPage(1);
+                          }}
+                          className="px-3 py-1 bg-zinc-800 border border-zinc-700 rounded text-sm text-white focus:border-indigo-500 focus:outline-none"
+                        >
+                          <option value="">Todos</option>
+                          {[...new Set(coupons.map(c => c.influencer_name))].filter(Boolean).sort().map((influencer) => (
+                            <option key={influencer} value={influencer}>{influencer}</option>
+                          ))}
+                        </select>
                       </div>
                     </div>
                   )}
@@ -933,7 +888,7 @@ export default function Dashboard() {
                       </div>
 
                       {/* Pagination Controls for Coupons */}
-                      <div className="mt-4 flex items-center justify-between">
+                      <div className="mt-4 flex items-center justify-between mb-6">
                         <span className="text-sm text-zinc-400">
                           Mostrando {paginatedCoupons.length > 0 ? (couponPage - 1) * couponsPerPage + 1 : 0} a{' '}
                           {Math.min(couponPage * couponsPerPage, coupons.length)} de {coupons.length} cupons
@@ -956,6 +911,48 @@ export default function Dashboard() {
                           >
                             Próxima
                           </button>
+                        </div>
+                      </div>
+
+                      {/* Controls Row */}
+                      <div className="flex items-center justify-between gap-4">
+                        {/* Rows per page */}
+                        <div className="flex items-center gap-2">
+                          <label className="text-sm text-zinc-400">Linhas por página:</label>
+                          <select
+                            value={couponsPerPage}
+                            onChange={(e) => {
+                              setCouponsPerPage(Number(e.target.value));
+                              setCouponPage(1);
+                            }}
+                            className="px-3 py-1 bg-zinc-800 border border-zinc-700 rounded text-sm text-white focus:border-indigo-500 focus:outline-none"
+                          >
+                            <option value={20}>20</option>
+                            <option value={50}>50</option>
+                            <option value={100}>100</option>
+                          </select>
+                        </div>
+
+                        {/* Column Filter Dropdown */}
+                        <div className="relative group">
+                          <button className="px-3 py-1 bg-zinc-800 border border-zinc-700 rounded text-sm text-white hover:bg-zinc-700 transition">
+                            Colunas
+                          </button>
+                          <div className="absolute right-0 mt-0 w-48 bg-zinc-900 border border-zinc-700 rounded shadow-xl z-50 hidden group-hover:block">
+                            <div className="p-3 space-y-2">
+                              {couponColumns.map((col) => (
+                                <label key={col.key} className="flex items-center gap-2 text-sm text-zinc-300 cursor-pointer hover:text-white">
+                                  <input
+                                    type="checkbox"
+                                    checked={visibleCouponColumns.includes(col.key)}
+                                    onChange={() => toggleCouponColumn(col.key)}
+                                    className="rounded"
+                                  />
+                                  {col.label}
+                                </label>
+                              ))}
+                            </div>
+                          </div>
                         </div>
                       </div>
                     </div>
