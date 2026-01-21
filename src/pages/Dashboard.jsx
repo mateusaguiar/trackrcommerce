@@ -9,6 +9,8 @@ import {
   Plus,
   Filter,
   RefreshCw,
+  ArrowUp,
+  ArrowDown,
 } from 'lucide-react';
 import { Button } from '../components/Button.jsx';
 import { authFunctions, dataFunctions, getErrorMessage } from '../lib/supabaseClient.js';
@@ -41,6 +43,14 @@ export default function Dashboard() {
   // Pagination state for conversions
   const [conversionPage, setConversionPage] = useState(1);
   const [conversionsPerPage, setConversionsPerPage] = useState(20);
+
+  // Sorting state for coupons
+  const [couponSortBy, setCouponSortBy] = useState('created_at');
+  const [couponSortDirection, setCouponSortDirection] = useState('desc'); // 'asc' or 'desc'
+
+  // Sorting state for conversions
+  const [conversionSortBy, setConversionSortBy] = useState('sale_date');
+  const [conversionSortDirection, setConversionSortDirection] = useState('desc'); // 'asc' or 'desc'
 
   // Column visibility state for coupons
   const couponColumns = [
@@ -96,6 +106,85 @@ export default function Dashboard() {
     );
   };
 
+  // Helper function to sort coupons
+  const getSortedCoupons = (data) => {
+    const sorted = [...data].sort((a, b) => {
+      let aVal = a[couponSortBy];
+      let bVal = b[couponSortBy];
+
+      // Handle different data types
+      if (couponSortBy === 'created_at' || couponSortBy === 'last_usage') {
+        aVal = new Date(aVal || 0).getTime();
+        bVal = new Date(bVal || 0).getTime();
+      } else if (couponSortBy === 'usage_count' || couponSortBy === 'total_sales') {
+        aVal = Number(aVal || 0);
+        bVal = Number(bVal || 0);
+      } else if (couponSortBy === 'discount_value') {
+        aVal = Number(aVal || 0);
+        bVal = Number(bVal || 0);
+      } else {
+        aVal = String(aVal || '').toLowerCase();
+        bVal = String(bVal || '').toLowerCase();
+      }
+
+      if (aVal < bVal) return couponSortDirection === 'asc' ? -1 : 1;
+      if (aVal > bVal) return couponSortDirection === 'asc' ? 1 : -1;
+      return 0;
+    });
+    return sorted;
+  };
+
+  // Helper function to sort conversions
+  const getSortedConversions = (data) => {
+    const sorted = [...data].sort((a, b) => {
+      let aVal = a[conversionSortBy];
+      let bVal = b[conversionSortBy];
+
+      // Handle different data types
+      if (conversionSortBy === 'sale_date') {
+        aVal = new Date(aVal || 0).getTime();
+        bVal = new Date(bVal || 0).getTime();
+      } else if (conversionSortBy === 'order_amount' || conversionSortBy === 'commission_amount') {
+        aVal = Number(aVal || 0);
+        bVal = Number(bVal || 0);
+      } else {
+        aVal = String(aVal || '').toLowerCase();
+        bVal = String(bVal || '').toLowerCase();
+      }
+
+      if (aVal < bVal) return conversionSortDirection === 'asc' ? -1 : 1;
+      if (aVal > bVal) return conversionSortDirection === 'asc' ? 1 : -1;
+      return 0;
+    });
+    return sorted;
+  };
+
+  // Handle coupon column sort
+  const handleCouponSort = (columnKey) => {
+    if (couponSortBy === columnKey) {
+      // Toggle direction if same column
+      setCouponSortDirection(couponSortDirection === 'asc' ? 'desc' : 'asc');
+    } else {
+      // New column, default to ascending
+      setCouponSortBy(columnKey);
+      setCouponSortDirection('asc');
+    }
+    setCouponPage(1); // Reset to first page
+  };
+
+  // Handle conversion column sort
+  const handleConversionSort = (columnKey) => {
+    if (conversionSortBy === columnKey) {
+      // Toggle direction if same column
+      setConversionSortDirection(conversionSortDirection === 'asc' ? 'desc' : 'asc');
+    } else {
+      // New column, default to ascending
+      setConversionSortBy(columnKey);
+      setConversionSortDirection('asc');
+    }
+    setConversionPage(1); // Reset to first page
+  };
+
   // Helper function to get start and end of day in GMT-3
   const getDateInGMT3 = (date) => {
     const offset = -3 * 60 * 60 * 1000; // GMT-3 in milliseconds
@@ -114,6 +203,20 @@ export default function Dashboard() {
   const parseInputDate = (dateString) => {
     const [year, month, day] = dateString.split('-').map(Number);
     return new Date(year, month - 1, day);
+  };
+
+  // Helper to render sort icon for header
+  const renderSortIcon = (columnKey, isCoupon = true) => {
+    const isActive = isCoupon ? couponSortBy === columnKey : conversionSortBy === columnKey;
+    const direction = isCoupon ? couponSortDirection : conversionSortDirection;
+    
+    if (!isActive) {
+      return <span className="text-zinc-600 text-xs ml-1">↕</span>;
+    }
+    
+    return direction === 'asc' 
+      ? <ArrowUp size={14} className="inline ml-1" />
+      : <ArrowDown size={14} className="inline ml-1" />;
   };
 
   // Quick filter: Today
@@ -144,19 +247,21 @@ export default function Dashboard() {
     setEndDate(date);
   };
 
-  // Pagination helpers for coupons
-  const paginatedCoupons = coupons.slice(
+  // Pagination helpers for coupons (with sorting)
+  const sortedCoupons = getSortedCoupons(coupons);
+  const paginatedCoupons = sortedCoupons.slice(
     (couponPage - 1) * couponsPerPage,
     couponPage * couponsPerPage
   );
-  const totalCouponPages = Math.ceil(coupons.length / couponsPerPage);
+  const totalCouponPages = Math.ceil(sortedCoupons.length / couponsPerPage);
 
-  // Pagination helpers for conversions
-  const paginatedConversions = conversions.slice(
+  // Pagination helpers for conversions (with sorting)
+  const sortedConversions = getSortedConversions(conversions);
+  const paginatedConversions = sortedConversions.slice(
     (conversionPage - 1) * conversionsPerPage,
     conversionPage * conversionsPerPage
   );
-  const totalConversionPages = Math.ceil(conversions.length / conversionsPerPage);
+  const totalConversionPages = Math.ceil(sortedConversions.length / conversionsPerPage);
 
   // Get current user and their brands on mount
   useEffect(() => {
@@ -641,28 +746,68 @@ export default function Dashboard() {
                           <thead>
                             <tr className="border-b border-zinc-700">
                               {visibleCouponColumns.includes('code') && (
-                                <th className="text-left py-4 px-4 text-sm font-medium text-zinc-400">Código</th>
+                                <th 
+                                  onClick={() => handleCouponSort('code')}
+                                  className="text-left py-4 px-4 text-sm font-medium text-zinc-400 cursor-pointer hover:text-zinc-200 transition"
+                                >
+                                  Código {renderSortIcon('code', true)}
+                                </th>
                               )}
                               {visibleCouponColumns.includes('influencer_name') && (
-                                <th className="text-left py-4 px-4 text-sm font-medium text-zinc-400">Influenciador</th>
+                                <th 
+                                  onClick={() => handleCouponSort('influencer_name')}
+                                  className="text-left py-4 px-4 text-sm font-medium text-zinc-400 cursor-pointer hover:text-zinc-200 transition"
+                                >
+                                  Influenciador {renderSortIcon('influencer_name', true)}
+                                </th>
                               )}
                               {visibleCouponColumns.includes('discount') && (
-                                <th className="text-left py-4 px-4 text-sm font-medium text-zinc-400">Desconto</th>
+                                <th 
+                                  onClick={() => handleCouponSort('discount_value')}
+                                  className="text-left py-4 px-4 text-sm font-medium text-zinc-400 cursor-pointer hover:text-zinc-200 transition"
+                                >
+                                  Desconto {renderSortIcon('discount_value', true)}
+                                </th>
                               )}
                               {visibleCouponColumns.includes('usage_count') && (
-                                <th className="text-left py-4 px-4 text-sm font-medium text-zinc-400">Usos</th>
+                                <th 
+                                  onClick={() => handleCouponSort('usage_count')}
+                                  className="text-left py-4 px-4 text-sm font-medium text-zinc-400 cursor-pointer hover:text-zinc-200 transition"
+                                >
+                                  Usos {renderSortIcon('usage_count', true)}
+                                </th>
                               )}
                               {visibleCouponColumns.includes('total_sales') && (
-                                <th className="text-left py-4 px-4 text-sm font-medium text-zinc-400">Valor Total</th>
+                                <th 
+                                  onClick={() => handleCouponSort('total_sales')}
+                                  className="text-left py-4 px-4 text-sm font-medium text-zinc-400 cursor-pointer hover:text-zinc-200 transition"
+                                >
+                                  Valor Total {renderSortIcon('total_sales', true)}
+                                </th>
                               )}
                               {visibleCouponColumns.includes('last_usage') && (
-                                <th className="text-left py-4 px-4 text-sm font-medium text-zinc-400">Último Uso</th>
+                                <th 
+                                  onClick={() => handleCouponSort('last_usage')}
+                                  className="text-left py-4 px-4 text-sm font-medium text-zinc-400 cursor-pointer hover:text-zinc-200 transition"
+                                >
+                                  Último Uso {renderSortIcon('last_usage', true)}
+                                </th>
                               )}
                               {visibleCouponColumns.includes('is_active') && (
-                                <th className="text-left py-4 px-4 text-sm font-medium text-zinc-400">Status</th>
+                                <th 
+                                  onClick={() => handleCouponSort('is_active')}
+                                  className="text-left py-4 px-4 text-sm font-medium text-zinc-400 cursor-pointer hover:text-zinc-200 transition"
+                                >
+                                  Status {renderSortIcon('is_active', true)}
+                                </th>
                               )}
                               {visibleCouponColumns.includes('created_at') && (
-                                <th className="text-left py-4 px-4 text-sm font-medium text-zinc-400">Criado em</th>
+                                <th 
+                                  onClick={() => handleCouponSort('created_at')}
+                                  className="text-left py-4 px-4 text-sm font-medium text-zinc-400 cursor-pointer hover:text-zinc-200 transition"
+                                >
+                                  Criado em {renderSortIcon('created_at', true)}
+                                </th>
                               )}
                             </tr>
                           </thead>
@@ -861,22 +1006,52 @@ export default function Dashboard() {
                           <thead>
                             <tr className="border-b border-zinc-700">
                               {visibleConversionColumns.includes('order_id') && (
-                                <th className="text-left py-4 px-4 text-sm font-medium text-zinc-400">ID do Pedido</th>
+                                <th 
+                                  onClick={() => handleConversionSort('order_id')}
+                                  className="text-left py-4 px-4 text-sm font-medium text-zinc-400 cursor-pointer hover:text-zinc-200 transition"
+                                >
+                                  ID do Pedido {renderSortIcon('order_id', false)}
+                                </th>
                               )}
                               {visibleConversionColumns.includes('coupon_code') && (
-                                <th className="text-left py-4 px-4 text-sm font-medium text-zinc-400">Cupom</th>
+                                <th 
+                                  onClick={() => handleConversionSort('coupon_code')}
+                                  className="text-left py-4 px-4 text-sm font-medium text-zinc-400 cursor-pointer hover:text-zinc-200 transition"
+                                >
+                                  Cupom {renderSortIcon('coupon_code', false)}
+                                </th>
                               )}
                               {visibleConversionColumns.includes('order_amount') && (
-                                <th className="text-left py-4 px-4 text-sm font-medium text-zinc-400">Valor</th>
+                                <th 
+                                  onClick={() => handleConversionSort('order_amount')}
+                                  className="text-left py-4 px-4 text-sm font-medium text-zinc-400 cursor-pointer hover:text-zinc-200 transition"
+                                >
+                                  Valor {renderSortIcon('order_amount', false)}
+                                </th>
                               )}
                               {visibleConversionColumns.includes('commission_amount') && (
-                                <th className="text-left py-4 px-4 text-sm font-medium text-zinc-400">Comissão</th>
+                                <th 
+                                  onClick={() => handleConversionSort('commission_amount')}
+                                  className="text-left py-4 px-4 text-sm font-medium text-zinc-400 cursor-pointer hover:text-zinc-200 transition"
+                                >
+                                  Comissão {renderSortIcon('commission_amount', false)}
+                                </th>
                               )}
                               {visibleConversionColumns.includes('status') && (
-                                <th className="text-left py-4 px-4 text-sm font-medium text-zinc-400">Status</th>
+                                <th 
+                                  onClick={() => handleConversionSort('status')}
+                                  className="text-left py-4 px-4 text-sm font-medium text-zinc-400 cursor-pointer hover:text-zinc-200 transition"
+                                >
+                                  Status {renderSortIcon('status', false)}
+                                </th>
                               )}
                               {visibleConversionColumns.includes('sale_date') && (
-                                <th className="text-left py-4 px-4 text-sm font-medium text-zinc-400">Data</th>
+                                <th 
+                                  onClick={() => handleConversionSort('sale_date')}
+                                  className="text-left py-4 px-4 text-sm font-medium text-zinc-400 cursor-pointer hover:text-zinc-200 transition"
+                                >
+                                  Data {renderSortIcon('sale_date', false)}
+                                </th>
                               )}
                             </tr>
                           </thead>
