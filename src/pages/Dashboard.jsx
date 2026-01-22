@@ -74,25 +74,14 @@ export default function Dashboard() {
   // Filter values (all possible values from date range)
   const [couponFilterValues, setCouponFilterValues] = useState({ couponCodes: [], influencerNames: [] });
   const [conversionFilterValues, setConversionFilterValues] = useState({ orderIds: [], couponCodes: [], statuses: [] });
-
-<<<<<<< HEAD
-=======
-<<<<<<< Updated upstream
-=======
->>>>>>> 0d719c3 (update coupon edit UI)
   // Classification state
   const [couponClassifications, setCouponClassifications] = useState([]);
   const [showClassificationModal, setShowClassificationModal] = useState(false);
   const [showCouponEditorModal, setShowCouponEditorModal] = useState(false);
   const [selectedCouponForEdit, setSelectedCouponForEdit] = useState(null);
-<<<<<<< HEAD
-
-=======
   // Force refresh token for coupons list
   const [couponsRefreshToken, setCouponsRefreshToken] = useState(0);
 
->>>>>>> Stashed changes
->>>>>>> 0d719c3 (update coupon edit UI)
   // Column visibility state for coupons
   const couponColumns = [
     { key: 'code', label: 'Código' },
@@ -1106,11 +1095,6 @@ export default function Dashboard() {
                       Nenhum cupom criado ainda
                     </div>
                   )}
-<<<<<<< HEAD
-=======
-<<<<<<< Updated upstream
-=======
->>>>>>> 0d719c3 (update coupon edit UI)
 
                   {/* Modals */}
                   <CouponClassificationModal
@@ -1141,13 +1125,6 @@ export default function Dashboard() {
                       setShowCouponEditorModal(false);
                       setSelectedCouponForEdit(null);
                     }}
-<<<<<<< HEAD
-                    onUpdate={() => {
-                      // Reload coupons by resetting pagination
-                      setCouponPage(1);
-                    }}
-                  />
-=======
                     onUpdate={(updatedCoupon) => {
                       // Optimistically update local coupons state
                       if (updatedCoupon?.id) {
@@ -1165,8 +1142,6 @@ export default function Dashboard() {
                       setCouponsRefreshToken((t) => t + 1);
                     }}
                   />
->>>>>>> Stashed changes
->>>>>>> 0d719c3 (update coupon edit UI)
                 </div>
               )}
 
