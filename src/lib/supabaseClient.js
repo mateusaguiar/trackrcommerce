@@ -1045,7 +1045,7 @@ export const dataFunctions = {
     try {
       let query = supabase
         .from('conversions')
-        .select('order_amount, sale_date, status, order_is_real')
+        .select('order_amount, sale_date, status')
         .eq('brand_id', brandId)
         .eq('order_is_real', true);
 
@@ -1086,36 +1086,61 @@ export const dataFunctions = {
   // Get top 5 coupon classifications by revenue
   getTopClassifications: async (brandId, filters = {}) => {
     try {
-      let query = supabase
+      // First, get conversions with coupon classification IDs
+      let convQuery = supabase
         .from('conversions')
-        .select('order_amount, status, coupon_id, coupons(classification, coupon_classifications(name, color))')
+        .select('order_amount, status, coupon_id, coupons(classification)')
         .eq('brand_id', brandId)
         .eq('order_is_real', true);
 
       if (filters.startDate) {
-        query = query.gte('sale_date', filters.startDate.toISOString());
+        convQuery = convQuery.gte('sale_date', filters.startDate.toISOString());
       }
       if (filters.endDate) {
-        query = query.lte('sale_date', filters.endDate.toISOString());
+        convQuery = convQuery.lte('sale_date', filters.endDate.toISOString());
       }
 
-      const { data, error } = await query;
-      if (error) throw error;
+      const { data: conversions, error: convError } = await convQuery;
+      if (convError) throw convError;
+
+      // Get all classifications for this brand
+      const { data: classifications, error: classError } = await supabase
+        .from('coupon_classifications')
+        .select('id, name, color')
+        .eq('brand_id', brandId)
+        .eq('is_active', true);
+
+      if (classError) throw classError;
+
+      // Create a map for quick lookup
+      const classMap = {};
+      (classifications || []).forEach(c => {
+        classMap[c.id] = { name: c.name, color: c.color };
+      });
 
       // Group by classification and sum revenue
       const classData = {};
-      (data || []).forEach(conv => {
+      (conversions || []).forEach(conv => {
         if (conv.status === 'paid' || conv.status === 'confirmed' || conv.status === 'completed') {
           const classId = conv.coupons?.classification;
-          const className = conv.coupons?.coupon_classifications?.name || 'Sem classificação';
-          const classColor = conv.coupons?.coupon_classifications?.color || '#6366f1';
           
-          const key = classId ? `${className}|${classColor}` : 'Sem classificação|#6366f1';
-          
-          if (!classData[key]) {
-            classData[key] = { name: className, color: classColor, revenue: 0 };
+          if (classId && classMap[classId]) {
+            const className = classMap[classId].name;
+            const classColor = classMap[classId].color;
+            const key = `${classId}`;
+            
+            if (!classData[key]) {
+              classData[key] = { name: className, color: classColor, revenue: 0 };
+            }
+            classData[key].revenue += parseFloat(conv.order_amount || 0);
+          } else {
+            // Handle uncategorized coupons
+            const key = 'uncategorized';
+            if (!classData[key]) {
+              classData[key] = { name: 'Sem classificação', color: '#6366f1', revenue: 0 };
+            }
+            classData[key].revenue += parseFloat(conv.order_amount || 0);
           }
-          classData[key].revenue += parseFloat(conv.order_amount || 0);
         }
       });
 
@@ -1140,7 +1165,7 @@ export const dataFunctions = {
     try {
       let query = supabase
         .from('conversions')
-        .select('order_amount, status, coupon_id, coupons(code)')
+        .select('order_amount, status, coupons(code)')
         .eq('brand_id', brandId)
         .eq('order_is_real', true);
 
