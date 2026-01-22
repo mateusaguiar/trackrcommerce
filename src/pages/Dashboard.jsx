@@ -601,7 +601,7 @@ export default function Dashboard() {
                   }`}
                 >
                   <Ticket size={18} />
-                  Cupons ({coupons.length})
+                  Cupons ({totalCouponCount.length})
                 </button>
                 <button
                   onClick={() => setActiveTab('conversions')}
@@ -612,7 +612,7 @@ export default function Dashboard() {
                   }`}
                 >
                   <ShoppingBag size={18} />
-                  Vendas ({conversions.length})
+                  Vendas ({totalConversionCount.length})
                 </button>
               </div>
 
