@@ -1068,7 +1068,7 @@ export default function Dashboard() {
                           <option value="">Todos</option>
                           {conversionFilterValues.statuses.map((status) => (
                             <option key={status} value={status}>
-                              {status === 'paid' ? 'Pago' : status === 'confirmed' ? 'Confirmado' : status === 'completed' ? 'Completo' : status === 'pending' ? 'Pendente' : 'Cancelado'}
+                              {status === 'authorized' ? 'Autorizado' : status === 'paid' ? 'Pago' : status === 'voided' ? 'Anulado' : status === 'refunded' ? 'Reembolsado' : status === 'pending' ? 'Pendente' : status}
                             </option>
                           ))}
                         </select>
@@ -1199,24 +1199,26 @@ export default function Dashboard() {
                                   <td className="py-4 px-4 text-sm">
                                     <span
                                       className={`px-3 py-1 rounded-full text-xs font-medium ${
-                                        conversion.status === 'paid' || conversion.status === 'confirmed'
+                                        conversion.status === 'paid' || conversion.status === 'authorized'
                                           ? 'bg-emerald-500/10 text-emerald-400'
-                                          : conversion.status === 'completed'
-                                            ? 'bg-emerald-500/10 text-emerald-400'
-                                            : conversion.status === 'pending'
-                                              ? 'bg-yellow-500/10 text-yellow-400'
-                                              : 'bg-red-500/10 text-red-400'
+                                          : conversion.status === 'pending'
+                                            ? 'bg-yellow-500/10 text-yellow-400'
+                                            : conversion.status === 'voided' || conversion.status === 'refunded'
+                                              ? 'bg-red-500/10 text-red-400'
+                                              : 'bg-zinc-500/10 text-zinc-400'
                                       }`}
                                     >
-                                      {conversion.status === 'paid'
-                                        ? 'Pago'
-                                        : conversion.status === 'confirmed'
-                                          ? 'Confirmado'
-                                          : conversion.status === 'completed'
-                                            ? 'Completo'
-                                            : conversion.status === 'pending'
-                                              ? 'Pendente'
-                                              : 'Cancelado'}
+                                      {conversion.status === 'authorized'
+                                        ? 'Autorizado'
+                                        : conversion.status === 'paid'
+                                          ? 'Pago'
+                                          : conversion.status === 'voided'
+                                            ? 'Anulado'
+                                            : conversion.status === 'refunded'
+                                              ? 'Reembolsado'
+                                              : conversion.status === 'pending'
+                                                ? 'Pendente'
+                                                : conversion.status}
                                     </span>
                                   </td>
                                 )}
