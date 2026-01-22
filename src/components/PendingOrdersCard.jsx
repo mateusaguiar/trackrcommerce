@@ -1,8 +1,9 @@
 import React from 'react';
 import { AlertCircle } from 'lucide-react';
 import {
-  BarChart,
+  ComposedChart,
   Bar,
+  Line,
   XAxis,
   YAxis,
   CartesianGrid,
@@ -72,14 +73,22 @@ export function PendingOrdersCard({ data, loading, error }) {
 
       {dailyChart && dailyChart.length > 0 ? (
         <ResponsiveContainer width="100%" height={200}>
-          <BarChart data={dailyChart} margin={{ top: 10, right: 20, left: -20, bottom: 15 }}>
+          <ComposedChart data={dailyChart} margin={{ top: 10, right: 80, left: -20, bottom: 15 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="#27272a" />
             <XAxis 
               dataKey="date" 
               stroke="#a1a1aa"
               style={{ fontSize: '11px' }}
             />
-            <YAxis 
+            <YAxis
+              yAxisId="left"
+              stroke="#a1a1aa"
+              style={{ fontSize: '11px' }}
+              tickFormatter={(value) => `R$ ${(value / 1000).toFixed(0)}k`}
+            />
+            <YAxis
+              yAxisId="right"
+              orientation="right"
               stroke="#a1a1aa"
               style={{ fontSize: '11px' }}
             />
@@ -89,10 +98,15 @@ export function PendingOrdersCard({ data, loading, error }) {
                 border: '1px solid #52525b',
                 borderRadius: '8px',
               }}
-              formatter={(value) => `${value} pedido${value !== 1 ? 's' : ''}`}
+              formatter={(value, name) => {
+                if (name === 'receita') return `R$ ${value.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`;
+                if (name === 'pedidos') return `${value} pedido${value !== 1 ? 's' : ''}`;
+                return value;
+              }}
             />
-            <Bar dataKey="count" fill="#f97316" radius={[8, 8, 0, 0]} />
-          </BarChart>
+            <Bar yAxisId="left" dataKey="receita" fill="#f97316" radius={[8, 8, 0, 0]} />
+            <Line yAxisId="right" type="monotone" dataKey="pedidos" stroke="#733509" strokeWidth={2} dot={{ fill: '#733509', r: 3 }} />
+          </ComposedChart>
         </ResponsiveContainer>
       ) : null}
     </div>

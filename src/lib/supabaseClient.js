@@ -1059,15 +1059,17 @@ export const dataFunctions = {
       const { data, error } = await query;
       if (error) throw error;
 
-      // Group by date and sum revenue
+      // Group by date and sum revenue, count orders
       const dailyData = {};
       (data || []).forEach(conv => {
         if (conv.status === 'paid' || conv.status === 'confirmed' || conv.status === 'completed') {
-          const dateObj = new Date(conv.sale_date);
-          const dateKey = dateObj.toISOString().split('T')[0]; // Use ISO date for sorting
-          const displayDate = dateObj.toLocaleDateString('pt-BR');
-          dailyData[dateKey] = dailyData[dateKey] || { display: displayDate, revenue: 0 };
-          dailyData[dateKey].revenue += parseFloat(conv.order_amount || 0);
+          const dateString = conv.sale_date.split('T')[0];
+          const [year, month, day] = dateString.split('-');
+          const displayDate = `${day}/${month}/${year}`;
+          
+          dailyData[dateString] = dailyData[dateString] || { display: displayDate, revenue: 0, count: 0 };
+          dailyData[dateString].revenue += parseFloat(conv.order_amount || 0);
+          dailyData[dateString].count += 1;
         }
       });
 
@@ -1076,7 +1078,8 @@ export const dataFunctions = {
         .sort()
         .map(dateKey => ({
           date: dailyData[dateKey].display,
-          revenue: parseFloat(dailyData[dateKey].revenue.toFixed(2))
+          receita: parseFloat(dailyData[dateKey].revenue.toFixed(2)),
+          pedidos: dailyData[dateKey].count
         }));
 
       return { data: sorted, error: null };
@@ -1244,8 +1247,9 @@ export const dataFunctions = {
         const [year, month, day] = dateString.split('-');
         const displayDate = `${day}/${month}/${year}`; // Format as DD/MM/YYYY
         
-        dailyPending[dateString] = dailyPending[dateString] || { display: displayDate, count: 0 };
+        dailyPending[dateString] = dailyPending[dateString] || { display: displayDate, count: 0, revenue: 0 };
         dailyPending[dateString].count += 1;
+        dailyPending[dateString].revenue += parseFloat(order.order_amount || 0);
       });
 
       // Sort by date and format
@@ -1253,7 +1257,8 @@ export const dataFunctions = {
         .sort()
         .map(dateKey => ({
           date: dailyPending[dateKey].display,
-          count: dailyPending[dateKey].count
+          receita: parseFloat(dailyPending[dateKey].revenue.toFixed(2)),
+          pedidos: dailyPending[dateKey].count
         }));
 
       return {
