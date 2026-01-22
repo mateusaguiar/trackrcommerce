@@ -682,8 +682,7 @@ export const dataFunctions = {
           brand_id,
           influencers(id, name, social_handle, commission_rate)
         `)
-        .eq('brand_id', brandId)
-        .eq('is_real', true);
+        .eq('brand_id', brandId);
 
       // Apply coupon code filter server-side
       if (couponCode) {
@@ -691,8 +690,6 @@ export const dataFunctions = {
       }
 
       const { data: allCoupons, error: couponError } = await couponQuery;
-
-      if (couponError) throw couponError;
 
       if (couponError) throw couponError;
 
@@ -804,8 +801,7 @@ export const dataFunctions = {
           code,
           influencers(name)
         `)
-        .eq('brand_id', brandId)
-        .eq('is_real', true);
+        .eq('brand_id', brandId);
 
       // Apply coupon code filter server-side
       if (couponCode) {
