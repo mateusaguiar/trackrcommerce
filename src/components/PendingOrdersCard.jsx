@@ -1,5 +1,14 @@
 import React from 'react';
 import { AlertCircle } from 'lucide-react';
+import {
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+} from 'recharts';
 
 export function PendingOrdersCard({ data, loading, error }) {
   if (loading) {
@@ -34,7 +43,7 @@ export function PendingOrdersCard({ data, loading, error }) {
     );
   }
 
-  const { revenue = 0, count = 0 } = data || {};
+  const { revenue = 0, count = 0, dailyChart = [] } = data || {};
 
   return (
     <div className="bg-gradient-to-br from-zinc-900 to-zinc-800 border border-zinc-700 rounded-lg p-6">
@@ -45,21 +54,47 @@ export function PendingOrdersCard({ data, loading, error }) {
         </div>
       </div>
       
-      <div className="space-y-4">
+      <div className="grid grid-cols-2 gap-4 mb-6">
         <div>
           <p className="text-xs text-zinc-500 mb-1">Receita Pendente</p>
-          <p className="text-3xl font-bold text-orange-400">
+          <p className="text-2xl font-bold text-orange-400">
             R$ {revenue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
           </p>
         </div>
         
-        <div className="pt-2 border-t border-zinc-700">
+        <div>
           <p className="text-xs text-zinc-500 mb-1">Quantidade de Pedidos</p>
           <p className="text-2xl font-bold text-zinc-300">
-            {count} {count === 1 ? 'pedido' : 'pedidos'}
+            {count}
           </p>
         </div>
       </div>
+
+      {dailyChart && dailyChart.length > 0 ? (
+        <ResponsiveContainer width="100%" height={200}>
+          <BarChart data={dailyChart} margin={{ top: 10, right: 20, left: -20, bottom: 15 }}>
+            <CartesianGrid strokeDasharray="3 3" stroke="#27272a" />
+            <XAxis 
+              dataKey="date" 
+              stroke="#a1a1aa"
+              style={{ fontSize: '11px' }}
+            />
+            <YAxis 
+              stroke="#a1a1aa"
+              style={{ fontSize: '11px' }}
+            />
+            <Tooltip
+              contentStyle={{
+                backgroundColor: '#27272a',
+                border: '1px solid #52525b',
+                borderRadius: '8px',
+              }}
+              formatter={(value) => `${value} pedido${value !== 1 ? 's' : ''}`}
+            />
+            <Bar dataKey="count" fill="#f97316" radius={[8, 8, 0, 0]} />
+          </BarChart>
+        </ResponsiveContainer>
+      ) : null}
     </div>
   );
 }

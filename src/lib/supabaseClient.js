@@ -1063,17 +1063,20 @@ export const dataFunctions = {
       const dailyData = {};
       (data || []).forEach(conv => {
         if (conv.status === 'paid' || conv.status === 'confirmed' || conv.status === 'completed') {
-          const date = new Date(conv.sale_date).toLocaleDateString('pt-BR');
-          dailyData[date] = (dailyData[date] || 0) + parseFloat(conv.order_amount || 0);
+          const dateObj = new Date(conv.sale_date);
+          const dateKey = dateObj.toISOString().split('T')[0]; // Use ISO date for sorting
+          const displayDate = dateObj.toLocaleDateString('pt-BR');
+          dailyData[dateKey] = dailyData[dateKey] || { display: displayDate, revenue: 0 };
+          dailyData[dateKey].revenue += parseFloat(conv.order_amount || 0);
         }
       });
 
-      // Sort by date and format
-      const sorted = Object.entries(dailyData)
-        .sort((a, b) => new Date(a[0]) - new Date(b[0]))
-        .map(([date, revenue]) => ({
-          date,
-          revenue: parseFloat(revenue.toFixed(2))
+      // Sort by date ascending and format
+      const sorted = Object.keys(dailyData)
+        .sort()
+        .map(dateKey => ({
+          date: dailyData[dateKey].display,
+          revenue: parseFloat(dailyData[dateKey].revenue.toFixed(2))
         }));
 
       return { data: sorted, error: null };
@@ -1183,8 +1186,11 @@ export const dataFunctions = {
       const couponData = {};
       (data || []).forEach(conv => {
         if (conv.status === 'paid' || conv.status === 'confirmed' || conv.status === 'completed') {
-          const code = conv.coupons?.code || 'N/A';
-          couponData[code] = (couponData[code] || 0) + parseFloat(conv.order_amount || 0);
+          const code = conv.coupons?.code;
+          // Skip orders without coupons
+          if (code && code !== 'N/A') {
+            couponData[code] = (couponData[code] || 0) + parseFloat(conv.order_amount || 0);
+          }
         }
       });
 
@@ -1204,12 +1210,12 @@ export const dataFunctions = {
     }
   },
 
-  // Get pending orders revenue and count
+  // Get pending orders revenue and count with daily breakdown
   getPendingOrders: async (brandId, filters = {}) => {
     try {
       let query = supabase
         .from('conversions')
-        .select('order_amount, status')
+        .select('order_amount, status, sale_date')
         .eq('brand_id', brandId)
         .eq('status', 'pending')
         .eq('order_is_real', true);
@@ -1230,16 +1236,35 @@ export const dataFunctions = {
         0
       );
 
+      // Group pending orders by date for chart
+      const dailyPending = {};
+      pendingOrders.forEach(order => {
+        const dateObj = new Date(order.sale_date);
+        const dateKey = dateObj.toISOString().split('T')[0];
+        const displayDate = dateObj.toLocaleDateString('pt-BR');
+        dailyPending[dateKey] = dailyPending[dateKey] || { display: displayDate, count: 0 };
+        dailyPending[dateKey].count += 1;
+      });
+
+      // Sort by date and format
+      const dailyChart = Object.keys(dailyPending)
+        .sort()
+        .map(dateKey => ({
+          date: dailyPending[dateKey].display,
+          count: dailyPending[dateKey].count
+        }));
+
       return {
         data: {
           revenue: parseFloat(totalRevenue.toFixed(2)),
-          count: pendingOrders.length
+          count: pendingOrders.length,
+          dailyChart
         },
         error: null
       };
     } catch (err) {
       console.error('Error in getPendingOrders:', err);
-      return { data: { revenue: 0, count: 0 }, error: err.message || String(err) };
+      return { data: { revenue: 0, count: 0, dailyChart: [] }, error: err.message || String(err) };
     }
   },
 
