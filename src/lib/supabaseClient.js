@@ -222,6 +222,19 @@ export const dataFunctions = {
     if (!supabase) throw new Error('Supabase not configured');
     
     try {
+      const { 
+        page = 1, 
+        limit = 20, 
+        sortBy = 'sale_date', 
+        sortDirection = 'desc',
+        orderId,
+        couponCode,
+        status,
+        startDate,
+        endDate,
+        includeTestOrders = false
+      } = filters;
+
       let query = supabase
         .from('conversions')
         .select(`
@@ -238,40 +251,140 @@ export const dataFunctions = {
           metadata,
           coupon_id,
           coupons(id, code)
-        `)
+        `, { count: 'exact' })
         .eq('brand_id', brandId);
 
-      // Filter out test orders by default (unless explicitly included)
-      if (filters.includeTestOrders !== true) {
+      // Filter out test orders by default
+      if (!includeTestOrders) {
         query = query.eq('order_is_real', true);
       }
 
-      // Apply status filter if provided
-      if (filters.status) {
-        query = query.eq('status', filters.status);
+      // Apply filters
+      if (status) {
+        query = query.eq('status', status);
       }
 
-      // Apply date range filter if provided
-      if (filters.startDate) {
-        query = query.gte('sale_date', filters.startDate.toISOString());
+      if (startDate) {
+        query = query.gte('sale_date', startDate.toISOString());
       }
-      if (filters.endDate) {
-        query = query.lte('sale_date', filters.endDate.toISOString());
+      if (endDate) {
+        query = query.lte('sale_date', endDate.toISOString());
       }
 
-      const { data, error } = await query.order('sale_date', { ascending: false });
+      // Client-side filters (after fetching) for order_id and coupon_code
+      // We'll apply these after getting the data since they involve joined tables
+
+      // Apply sorting
+      const ascending = sortDirection === 'asc';
+      query = query.order(sortBy, { ascending });
+
+      // Apply pagination
+      const from = (page - 1) * limit;
+      const to = from + limit - 1;
+      
+      const { data, error, count } = await query.range(from, to);
 
       if (error) throw error;
 
-      // Transform data to flatten coupon code for easier access
-      const transformedData = (data || []).map(conversion => ({
+      // Transform data to flatten coupon code
+      let transformedData = (data || []).map(conversion => ({
         ...conversion,
         coupon_code: conversion.coupons?.code || 'N/A',
       }));
 
-      return { conversions: transformedData, error: null };
+      // Apply client-side filters for orderId and couponCode
+      if (orderId) {
+        transformedData = transformedData.filter(c => 
+          (c.order_number || c.order_id) === orderId
+        );
+      }
+      if (couponCode) {
+        transformedData = transformedData.filter(c => c.coupon_code === couponCode);
+      }
+
+      return { 
+        conversions: transformedData, 
+        totalCount: count || 0,
+        error: null 
+      };
     } catch (error) {
-      return { conversions: [], error: error.message };
+      return { conversions: [], totalCount: 0, error: error.message };
+    }
+  },
+
+  // Get conversion totals for subtotals row
+  getBrandConversionTotals: async (brandId, filters = {}) => {
+    if (!supabase) throw new Error('Supabase not configured');
+    
+    try {
+      const { 
+        orderId,
+        couponCode,
+        status,
+        startDate,
+        endDate,
+        includeTestOrders = false
+      } = filters;
+
+      let query = supabase
+        .from('conversions')
+        .select(`
+          order_amount,
+          commission_amount,
+          order_id,
+          order_number,
+          status,
+          coupon_id,
+          coupons(code)
+        `)
+        .eq('brand_id', brandId);
+
+      // Filter out test orders by default
+      if (!includeTestOrders) {
+        query = query.eq('order_is_real', true);
+      }
+
+      // Apply filters
+      if (status) {
+        query = query.eq('status', status);
+      }
+
+      if (startDate) {
+        query = query.gte('sale_date', startDate.toISOString());
+      }
+      if (endDate) {
+        query = query.lte('sale_date', endDate.toISOString());
+      }
+
+      const { data, error } = await query;
+
+      if (error) throw error;
+
+      // Apply client-side filters and calculate totals
+      let filteredData = (data || []).map(c => ({
+        ...c,
+        coupon_code: c.coupons?.code || 'N/A'
+      }));
+
+      if (orderId) {
+        filteredData = filteredData.filter(c => 
+          (c.order_number || c.order_id) === orderId
+        );
+      }
+      if (couponCode) {
+        filteredData = filteredData.filter(c => c.coupon_code === couponCode);
+      }
+
+      const totalRevenue = filteredData.reduce((sum, c) => sum + parseFloat(c.order_amount || 0), 0);
+      const totalCommission = filteredData.reduce((sum, c) => sum + parseFloat(c.commission_amount || 0), 0);
+
+      return { 
+        totalRevenue,
+        totalCommission,
+        error: null 
+      };
+    } catch (error) {
+      return { totalRevenue: 0, totalCommission: 0, error: error.message };
     }
   },
 
@@ -544,7 +657,18 @@ export const dataFunctions = {
     if (!supabase) throw new Error('Supabase not configured');
     
     try {
-      // Get coupons with influencer details
+      const { 
+        page = 1, 
+        limit = 20, 
+        sortBy = 'created_at', 
+        sortDirection = 'desc',
+        couponCode,
+        influencerName,
+        startDate,
+        endDate
+      } = filters;
+
+      // Get ALL coupons with influencer details (no date filter on coupons)
       let couponQuery = supabase
         .from('coupons')
         .select(`
@@ -560,22 +684,29 @@ export const dataFunctions = {
         `)
         .eq('brand_id', brandId);
 
-      // Apply date range filter if provided
-      if (filters.startDate) {
-        couponQuery = couponQuery.gte('created_at', filters.startDate.toISOString());
-      }
-      if (filters.endDate) {
-        couponQuery = couponQuery.lte('created_at', filters.endDate.toISOString());
+      // Apply coupon code filter server-side
+      if (couponCode) {
+        couponQuery = couponQuery.eq('code', couponCode);
       }
 
-      const { data: coupons, error: couponError } = await couponQuery.order('created_at', { ascending: false });
+      const { data: allCoupons, error: couponError } = await couponQuery;
 
       if (couponError) throw couponError;
 
-      // Get metrics for each coupon
+      // Filter by influencer name before calculating metrics
+      let filteredCoupons = (allCoupons || []).map(c => ({
+        ...c,
+        influencer_name: c.influencers?.name || 'Sem influenciador'
+      }));
+
+      if (influencerName) {
+        filteredCoupons = filteredCoupons.filter(c => c.influencer_name === influencerName);
+      }
+
+      // Get metrics for filtered coupons
       const couponsWithMetrics = await Promise.all(
-        (coupons || []).map(async (coupon) => {
-          // Get conversions for this coupon
+        filteredCoupons.map(async (coupon) => {
+          // Get conversions for this coupon in the date range
           let convQuery = supabase
             .from('conversions')
             .select('order_amount, status, sale_date, order_is_real')
@@ -583,11 +714,11 @@ export const dataFunctions = {
             .eq('order_is_real', true);
 
           // Apply date filters for conversions
-          if (filters.startDate) {
-            convQuery = convQuery.gte('sale_date', filters.startDate.toISOString());
+          if (startDate) {
+            convQuery = convQuery.gte('sale_date', startDate.toISOString());
           }
-          if (filters.endDate) {
-            convQuery = convQuery.lte('sale_date', filters.endDate.toISOString());
+          if (endDate) {
+            convQuery = convQuery.lte('sale_date', endDate.toISOString());
           }
 
           const { data: conversions, error: convError } = await convQuery;
@@ -610,7 +741,7 @@ export const dataFunctions = {
 
           return {
             ...coupon,
-            influencer_name: coupon.influencers?.name || 'Sem influenciador',
+            influencer_name: coupon.influencer_name,
             usage_count,
             total_sales,
             last_usage,
@@ -618,9 +749,122 @@ export const dataFunctions = {
         })
       );
 
-      return { coupons: couponsWithMetrics, error: null };
+      // Apply sorting
+      const ascending = sortDirection === 'asc';
+      couponsWithMetrics.sort((a, b) => {
+        let aVal = a[sortBy];
+        let bVal = b[sortBy];
+        
+        if (aVal === null || aVal === undefined) return 1;
+        if (bVal === null || bVal === undefined) return -1;
+        
+        if (typeof aVal === 'string') {
+          return ascending ? aVal.localeCompare(bVal) : bVal.localeCompare(aVal);
+        }
+        
+        return ascending ? aVal - bVal : bVal - aVal;
+      });
+
+      // Apply pagination
+      const totalCount = couponsWithMetrics.length;
+      const from = (page - 1) * limit;
+      const to = from + limit;
+      const paginatedCoupons = couponsWithMetrics.slice(from, to);
+
+      return { 
+        coupons: paginatedCoupons, 
+        totalCount,
+        error: null 
+      };
     } catch (error) {
-      return { coupons: [], error: error.message };
+      return { coupons: [], totalCount: 0, error: error.message };
+    }
+  },
+
+  // Get coupon totals for subtotals row
+  getCouponTotals: async (brandId, filters = {}) => {
+    if (!supabase) throw new Error('Supabase not configured');
+    
+    try {
+      const { 
+        couponCode,
+        influencerName,
+        startDate,
+        endDate
+      } = filters;
+
+      // Get all coupons with influencer details (no date filter on coupons)
+      let couponQuery = supabase
+        .from('coupons')
+        .select(`
+          id,
+          code,
+          influencers(name)
+        `)
+        .eq('brand_id', brandId);
+
+      // Apply coupon code filter server-side
+      if (couponCode) {
+        couponQuery = couponQuery.eq('code', couponCode);
+      }
+
+      const { data: coupons, error: couponError } = await couponQuery;
+
+      if (couponError) throw couponError;
+
+      // Apply influencer name filter
+      let filteredCoupons = (coupons || []).map(c => ({
+        ...c,
+        influencer_name: c.influencers?.name || 'Sem influenciador'
+      }));
+
+      if (influencerName) {
+        filteredCoupons = filteredCoupons.filter(c => c.influencer_name === influencerName);
+      }
+
+      const couponIds = filteredCoupons.map(c => c.id);
+
+      if (couponIds.length === 0) {
+        return { totalUsage: 0, totalSales: 0, error: null };
+      }
+
+      // Get conversions for these coupons
+      let convQuery = supabase
+        .from('conversions')
+        .select('order_amount, status, coupon_id')
+        .in('coupon_id', couponIds)
+        .eq('order_is_real', true);
+
+      // Apply date filters for conversions
+      if (startDate) {
+        convQuery = convQuery.gte('sale_date', startDate.toISOString());
+      }
+      if (endDate) {
+        convQuery = convQuery.lte('sale_date', endDate.toISOString());
+      }
+
+      const { data: conversions, error: convError } = await convQuery;
+
+      if (convError) throw convError;
+
+      // Calculate totals
+      const realConversions = (conversions || []).filter(
+        c => c.status === 'paid' || c.status === 'confirmed' || c.status === 'completed'
+      );
+
+      const totalUsage = realConversions.length;
+      const totalSales = realConversions.reduce(
+        (sum, conv) => sum + parseFloat(conv.order_amount || 0),
+        0
+      );
+
+      return { 
+        totalUsage,
+        totalSales,
+        error: null 
+      };
+    } catch (error) {
+      return { totalUsage: 0, totalSales: 0, error: error.message };
     }
   },
 
@@ -677,6 +921,120 @@ export const dataFunctions = {
       return { secret: data?.[0], error: null };
     } catch (error) {
       return { secret: null, error: error.message };
+    }
+  },
+
+  // Get distinct filter values for coupons
+  getCouponFilterValues: async (brandId, filters = {}) => {
+    if (!supabase) throw new Error('Supabase not configured');
+    
+    try {
+      const { startDate, endDate } = filters;
+      
+      // Fetch all coupons for the brand
+      let couponQuery = supabase
+        .from('coupons')
+        .select('id, code, influencer_id, influencers(name)')
+        .eq('brand_id', brandId);
+      
+      const { data: coupons, error: couponError } = await couponQuery;
+      if (couponError) throw couponError;
+      
+      if (!coupons || coupons.length === 0) {
+        return { couponCodes: [], influencerNames: [], error: null };
+      }
+      
+      const couponIds = coupons.map(c => c.id);
+      
+      // Fetch conversions for these coupons to filter by date range
+      let convQuery = supabase
+        .from('conversions')
+        .select('coupon_id')
+        .in('coupon_id', couponIds)
+        .eq('order_is_real', true);
+      
+      if (startDate) {
+        convQuery = convQuery.gte('sale_date', startDate.toISOString());
+      }
+      if (endDate) {
+        convQuery = convQuery.lte('sale_date', endDate.toISOString());
+      }
+      
+      const { data: conversions, error: convError } = await convQuery;
+      if (convError) throw convError;
+      
+      // Get coupon IDs that have conversions in the date range
+      const couponsWithConversions = new Set((conversions || []).map(c => c.coupon_id));
+      
+      // Filter coupons and get distinct values
+      const filteredCoupons = coupons.filter(c => couponsWithConversions.has(c.id));
+      
+      const couponCodes = [...new Set(
+        filteredCoupons.map(c => c.code).filter(Boolean)
+      )].sort();
+      
+      const influencerNames = [...new Set(
+        filteredCoupons
+          .filter(c => c.influencers?.name)
+          .map(c => c.influencers.name)
+      )].sort();
+      
+      return { couponCodes, influencerNames, error: null };
+    } catch (error) {
+      console.error('Error in getCouponFilterValues:', error);
+      return { couponCodes: [], influencerNames: [], error: error.message };
+    }
+  },
+
+  // Get distinct filter values for conversions
+  getConversionFilterValues: async (brandId, filters = {}) => {
+    if (!supabase) throw new Error('Supabase not configured');
+    
+    try {
+      const { startDate, endDate } = filters;
+      
+      // Fetch all conversions matching date filter with coupon info (no pagination)
+      let query = supabase
+        .from('conversions')
+        .select('order_number, status, coupon_id, coupons(code)')
+        .eq('brand_id', brandId)
+        .eq('order_is_real', true);
+      
+      if (startDate) {
+        query = query.gte('sale_date', startDate.toISOString());
+      }
+      if (endDate) {
+        query = query.lte('sale_date', endDate.toISOString());
+      }
+      
+      const { data: conversions, error } = await query;
+      if (error) throw error;
+      
+      // Get distinct order numbers
+      const orderIds = [...new Set(
+        (conversions || [])
+          .map(c => c.order_number)
+          .filter(Boolean)
+      )].sort();
+      
+      // Get distinct coupon codes
+      const couponCodes = [...new Set(
+        (conversions || [])
+          .map(c => c.coupons?.code)
+          .filter(Boolean)
+      )].sort();
+      
+      // Get distinct statuses
+      const statuses = [...new Set(
+        (conversions || [])
+          .map(c => c.status)
+          .filter(Boolean)
+      )].sort();
+      
+      return { orderIds, couponCodes, statuses, error: null };
+    } catch (error) {
+      console.error('Error in getConversionFilterValues:', error);
+      return { orderIds: [], couponCodes: [], statuses: [], error: error.message };
     }
   },
 };
