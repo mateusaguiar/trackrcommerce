@@ -1040,6 +1040,236 @@ export const dataFunctions = {
     }
   },
 
+  // Get daily revenue for chart
+  getDailyRevenue: async (brandId, filters = {}) => {
+    try {
+      let query = supabase
+        .from('conversions')
+        .select('order_amount, sale_date, status')
+        .eq('brand_id', brandId)
+        .eq('order_is_real', true);
+
+      if (filters.startDate) {
+        query = query.gte('sale_date', filters.startDate.toISOString());
+      }
+      if (filters.endDate) {
+        query = query.lte('sale_date', filters.endDate.toISOString());
+      }
+
+      const { data, error } = await query;
+      if (error) throw error;
+
+      // Group by date and sum revenue
+      const dailyData = {};
+      (data || []).forEach(conv => {
+        if (conv.status === 'paid' || conv.status === 'confirmed' || conv.status === 'completed') {
+          const dateObj = new Date(conv.sale_date);
+          const dateKey = dateObj.toISOString().split('T')[0]; // Use ISO date for sorting
+          const displayDate = dateObj.toLocaleDateString('pt-BR');
+          dailyData[dateKey] = dailyData[dateKey] || { display: displayDate, revenue: 0 };
+          dailyData[dateKey].revenue += parseFloat(conv.order_amount || 0);
+        }
+      });
+
+      // Sort by date ascending and format
+      const sorted = Object.keys(dailyData)
+        .sort()
+        .map(dateKey => ({
+          date: dailyData[dateKey].display,
+          revenue: parseFloat(dailyData[dateKey].revenue.toFixed(2))
+        }));
+
+      return { data: sorted, error: null };
+    } catch (err) {
+      console.error('Error in getDailyRevenue:', err);
+      return { data: [], error: err.message || String(err) };
+    }
+  },
+
+  // Get top 5 coupon classifications by revenue
+  getTopClassifications: async (brandId, filters = {}) => {
+    try {
+      // First, get conversions with coupon classification IDs
+      let convQuery = supabase
+        .from('conversions')
+        .select('order_amount, status, coupon_id, coupons(classification)')
+        .eq('brand_id', brandId)
+        .eq('order_is_real', true);
+
+      if (filters.startDate) {
+        convQuery = convQuery.gte('sale_date', filters.startDate.toISOString());
+      }
+      if (filters.endDate) {
+        convQuery = convQuery.lte('sale_date', filters.endDate.toISOString());
+      }
+
+      const { data: conversions, error: convError } = await convQuery;
+      if (convError) throw convError;
+
+      // Get all classifications for this brand
+      const { data: classifications, error: classError } = await supabase
+        .from('coupon_classifications')
+        .select('id, name, color')
+        .eq('brand_id', brandId)
+        .eq('is_active', true);
+
+      if (classError) throw classError;
+
+      // Create a map for quick lookup
+      const classMap = {};
+      (classifications || []).forEach(c => {
+        classMap[c.id] = { name: c.name, color: c.color };
+      });
+
+      // Group by classification and sum revenue
+      const classData = {};
+      (conversions || []).forEach(conv => {
+        if (conv.status === 'paid' || conv.status === 'confirmed' || conv.status === 'completed') {
+          const classId = conv.coupons?.classification;
+          
+          if (classId && classMap[classId]) {
+            const className = classMap[classId].name;
+            const classColor = classMap[classId].color;
+            const key = `${classId}`;
+            
+            if (!classData[key]) {
+              classData[key] = { name: className, color: classColor, revenue: 0 };
+            }
+            classData[key].revenue += parseFloat(conv.order_amount || 0);
+          } else {
+            // Handle uncategorized coupons
+            const key = 'uncategorized';
+            if (!classData[key]) {
+              classData[key] = { name: 'Sem classificação', color: '#6366f1', revenue: 0 };
+            }
+            classData[key].revenue += parseFloat(conv.order_amount || 0);
+          }
+        }
+      });
+
+      // Sort by revenue descending and take top 5
+      const sorted = Object.values(classData)
+        .sort((a, b) => b.revenue - a.revenue)
+        .slice(0, 5)
+        .map(item => ({
+          ...item,
+          revenue: parseFloat(item.revenue.toFixed(2))
+        }));
+
+      return { data: sorted, error: null };
+    } catch (err) {
+      console.error('Error in getTopClassifications:', err);
+      return { data: [], error: err.message || String(err) };
+    }
+  },
+
+  // Get top 10 coupons by revenue
+  getTopCoupons: async (brandId, filters = {}) => {
+    try {
+      let query = supabase
+        .from('conversions')
+        .select('order_amount, status, coupons(code)')
+        .eq('brand_id', brandId)
+        .eq('order_is_real', true);
+
+      if (filters.startDate) {
+        query = query.gte('sale_date', filters.startDate.toISOString());
+      }
+      if (filters.endDate) {
+        query = query.lte('sale_date', filters.endDate.toISOString());
+      }
+
+      const { data, error } = await query;
+      if (error) throw error;
+
+      // Group by coupon code and sum revenue
+      const couponData = {};
+      (data || []).forEach(conv => {
+        if (conv.status === 'paid' || conv.status === 'confirmed' || conv.status === 'completed') {
+          const code = conv.coupons?.code;
+          // Skip orders without coupons
+          if (code && code !== 'N/A') {
+            couponData[code] = (couponData[code] || 0) + parseFloat(conv.order_amount || 0);
+          }
+        }
+      });
+
+      // Sort by revenue descending and take top 10
+      const sorted = Object.entries(couponData)
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 10)
+        .map(([code, revenue]) => ({
+          code,
+          revenue: parseFloat(revenue.toFixed(2))
+        }));
+
+      return { data: sorted, error: null };
+    } catch (err) {
+      console.error('Error in getTopCoupons:', err);
+      return { data: [], error: err.message || String(err) };
+    }
+  },
+
+  // Get pending orders revenue and count with daily breakdown
+  getPendingOrders: async (brandId, filters = {}) => {
+    try {
+      let query = supabase
+        .from('conversions')
+        .select('order_amount, status, sale_date')
+        .eq('brand_id', brandId)
+        .eq('status', 'pending')
+        .eq('order_is_real', true);
+
+      if (filters.startDate) {
+        query = query.gte('sale_date', filters.startDate.toISOString());
+      }
+      if (filters.endDate) {
+        query = query.lte('sale_date', filters.endDate.toISOString());
+      }
+
+      const { data, error } = await query;
+      if (error) throw error;
+
+      const pendingOrders = data || [];
+      const totalRevenue = pendingOrders.reduce(
+        (sum, order) => sum + parseFloat(order.order_amount || 0),
+        0
+      );
+
+      // Group pending orders by date for chart
+      const dailyPending = {};
+      pendingOrders.forEach(order => {
+        // Parse date ensuring UTC handling - use the date string directly
+        const dateString = order.sale_date.split('T')[0]; // Extract YYYY-MM-DD
+        const [year, month, day] = dateString.split('-');
+        const displayDate = `${day}/${month}/${year}`; // Format as DD/MM/YYYY
+        
+        dailyPending[dateString] = dailyPending[dateString] || { display: displayDate, count: 0 };
+        dailyPending[dateString].count += 1;
+      });
+
+      // Sort by date and format
+      const dailyChart = Object.keys(dailyPending)
+        .sort()
+        .map(dateKey => ({
+          date: dailyPending[dateKey].display,
+          count: dailyPending[dateKey].count
+        }));
+
+      return {
+        data: {
+          revenue: parseFloat(totalRevenue.toFixed(2)),
+          count: pendingOrders.length,
+          dailyChart
+        },
+        error: null
+      };
+    } catch (err) {
+      console.error('Error in getPendingOrders:', err);
+      return { data: { revenue: 0, count: 0, dailyChart: [] }, error: err.message || String(err) };
+    }
+  },
+
   // Get all classifications for a brand
   async getCouponClassifications(brandId) {
     try {
@@ -1142,6 +1372,9 @@ export const dataFunctions = {
 // ============================================
 
 export const getErrorMessage = (error) => {
+  // Handle error objects
+  const errorString = typeof error === 'string' ? error : (error?.message || error?.error_description || String(error));
+  
   const errorMap = {
     'Invalid login credentials': 'E-mail ou senha incorretos',
     'Email not confirmed': 'Por favor, confirme seu e-mail antes de fazer login',
@@ -1151,7 +1384,7 @@ export const getErrorMessage = (error) => {
     'Supabase not configured': 'Supabase não está configurado',
   };
 
-  return errorMap[error] || error || 'Erro desconhecido. Por favor, tente novamente.';
+  return errorMap[errorString] || errorString || 'Erro desconhecido. Por favor, tente novamente.';
 };
 
 export default supabase;

@@ -15,6 +15,10 @@ import {
 import { Button } from '../components/Button.jsx';
 import { CouponClassificationModal } from '../components/CouponClassificationModal.jsx';
 import { CouponEditorModal } from '../components/CouponEditorModal.jsx';
+import { DailyRevenueCard } from '../components/DailyRevenueCard.jsx';
+import { TopClassificationsCard } from '../components/TopClassificationsCard.jsx';
+import { TopCouponsCard } from '../components/TopCouponsCard.jsx';
+import { PendingOrdersCard } from '../components/PendingOrdersCard.jsx';
 import { authFunctions, dataFunctions, getErrorMessage } from '../lib/supabaseClient.js';
 
 export default function Dashboard() {
@@ -81,6 +85,14 @@ export default function Dashboard() {
   const [selectedCouponForEdit, setSelectedCouponForEdit] = useState(null);
   // Force refresh token for coupons list
   const [couponsRefreshToken, setCouponsRefreshToken] = useState(0);
+
+  // Overview metrics state
+  const [dailyRevenueData, setDailyRevenueData] = useState([]);
+  const [topClassificationsData, setTopClassificationsData] = useState([]);
+  const [topCouponsData, setTopCouponsData] = useState([]);
+  const [pendingOrdersData, setPendingOrdersData] = useState({ revenue: 0, count: 0 });
+  const [overviewLoading, setOverviewLoading] = useState(false);
+  const [overviewError, setOverviewError] = useState('');
 
   // Column visibility state for coupons
   const couponColumns = [
@@ -303,6 +315,43 @@ export default function Dashboard() {
     };
 
     loadBrandData();
+  }, [selectedBrand, startDate, endDate]);
+
+  // Load overview metrics (daily revenue, top classifications, top coupons, pending orders)
+  useEffect(() => {
+    if (!selectedBrand) return;
+
+    const loadOverviewMetrics = async () => {
+      try {
+        setOverviewLoading(true);
+        setOverviewError('');
+
+        const [dailyRev, topClass, topCoup, pendingOrders] = await Promise.all([
+          dataFunctions.getDailyRevenue(selectedBrand.id, { startDate, endDate }),
+          dataFunctions.getTopClassifications(selectedBrand.id, { startDate, endDate }),
+          dataFunctions.getTopCoupons(selectedBrand.id, { startDate, endDate }),
+          dataFunctions.getPendingOrders(selectedBrand.id, { startDate, endDate }),
+        ]);
+
+        if (dailyRev.error) throw new Error(dailyRev.error);
+        if (topClass.error) throw new Error(topClass.error);
+        if (topCoup.error) throw new Error(topCoup.error);
+        if (pendingOrders.error) throw new Error(pendingOrders.error);
+
+        setDailyRevenueData(dailyRev.data || []);
+        setTopClassificationsData(topClass.data || []);
+        setTopCouponsData(topCoup.data || []);
+        setPendingOrdersData(pendingOrders.data || { revenue: 0, count: 0 });
+
+        setOverviewLoading(false);
+      } catch (err) {
+        console.error('Error loading overview metrics:', err);
+        setOverviewError(getErrorMessage(err));
+        setOverviewLoading(false);
+      }
+    };
+
+    loadOverviewMetrics();
   }, [selectedBrand, startDate, endDate]);
 
   // Load filter values for coupons when brand or date changes
@@ -664,93 +713,37 @@ export default function Dashboard() {
 
               {/* TAB: Overview */}
               {activeTab === 'overview' && (
-                <div>
-                  {loading ? (
-                    <div className="text-center py-12">
-                      <div className="animate-spin mb-4">
-                        <RefreshCw size={32} className="mx-auto text-indigo-500" />
-                      </div>
-                      <p className="text-zinc-400">Carregando métricas...</p>
-                    </div>
-                  ) : metrics ? (
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                      {/* Total Revenue */}
-                      <div className="bg-gradient-to-br from-zinc-900 to-zinc-800 border border-zinc-700 rounded-lg p-6">
-                        <div className="flex items-center justify-between mb-4">
-                          <h3 className="text-sm font-medium text-zinc-400">
-                            Receita Total
-                          </h3>
-                          <div className="p-2 bg-indigo-500/10 rounded-lg">
-                            <ShoppingBag className="text-indigo-500" size={20} />
-                          </div>
-                        </div>
-                        <p className="text-3xl font-bold">
-                          R$ {(metrics.total_revenue || 0).toLocaleString('pt-BR', {
-                            minimumFractionDigits: 2,
-                          })}
-                        </p>
-                        <p className="text-xs text-zinc-500 mt-2">
-                          {metrics.total_orders || 0} pedidos
-                        </p>
-                      </div>
+                <div className="space-y-6">
+                  {/* Daily Revenue Chart */}
+                  <DailyRevenueCard
+                    data={dailyRevenueData}
+                    loading={overviewLoading}
+                    error={overviewError}
+                  />
 
-                      {/* Active Coupons */}
-                      <div className="bg-gradient-to-br from-zinc-900 to-zinc-800 border border-zinc-700 rounded-lg p-6">
-                        <div className="flex items-center justify-between mb-4">
-                          <h3 className="text-sm font-medium text-zinc-400">
-                            Cupons Ativos
-                          </h3>
-                          <div className="p-2 bg-emerald-500/10 rounded-lg">
-                            <Ticket className="text-emerald-500" size={20} />
-                          </div>
-                        </div>
-                        <p className="text-3xl font-bold">{metrics.active_coupons || 0}</p>
-                        <p className="text-xs text-zinc-500 mt-2">
-                          {metrics.total_coupons || 0} cupons total
-                        </p>
-                      </div>
+                  {/* Charts Grid */}
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    {/* Top Classifications Chart */}
+                    <TopClassificationsCard
+                      data={topClassificationsData}
+                      loading={overviewLoading}
+                      error={overviewError}
+                    />
 
-                      {/* Influencers */}
-                      <div className="bg-gradient-to-br from-zinc-900 to-zinc-800 border border-zinc-700 rounded-lg p-6">
-                        <div className="flex items-center justify-between mb-4">
-                          <h3 className="text-sm font-medium text-zinc-400">
-                            Influenciadores
-                          </h3>
-                          <div className="p-2 bg-blue-500/10 rounded-lg">
-                            <Users className="text-blue-500" size={20} />
-                          </div>
-                        </div>
-                        <p className="text-3xl font-bold">{metrics.total_influencers || 0}</p>
-                        <p className="text-xs text-zinc-500 mt-2">
-                          {metrics.influencers_with_sales || 0} com vendas
-                        </p>
-                      </div>
+                    {/* Top Coupons Chart */}
+                    <TopCouponsCard
+                      data={topCouponsData}
+                      loading={overviewLoading}
+                      error={overviewError}
+                    />
+                  </div>
 
-                      {/* Average Commission */}
-                      <div className="bg-gradient-to-br from-zinc-900 to-zinc-800 border border-zinc-700 rounded-lg p-6">
-                        <div className="flex items-center justify-between mb-4">
-                          <h3 className="text-sm font-medium text-zinc-400">
-                            Comissão Total
-                          </h3>
-                          <div className="p-2 bg-purple-500/10 rounded-lg">
-                            <TrendingUp className="text-purple-500" size={20} />
-                          </div>
-                        </div>
-                        <p className="text-3xl font-bold">
-                          R$ {(metrics.total_commissions || 0).toLocaleString('pt-BR', {
-                            minimumFractionDigits: 2,
-                          })}
-                        </p>
-                        <p className="text-xs text-zinc-500 mt-2">
-                          {((metrics.commission_rate || 0) * 100).toFixed(1)}% avg
-                        </p>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="text-center py-12 text-zinc-400">
-                      Nenhuma métrica disponível
-                    </div>
-                  )}
+                  {/* Pending Orders Card */}
+                  <PendingOrdersCard
+                    data={pendingOrdersData}
+                    loading={overviewLoading}
+                    error={overviewError}
+                  />
                 </div>
               )}
 
