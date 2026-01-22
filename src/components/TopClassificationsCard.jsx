@@ -76,7 +76,7 @@ export function TopClassificationsCard({ data, loading, error }) {
             }}
             formatter={(value) => `R$ ${value.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`}
           />
-          <Bar dataKey="revenue" fill="#10b981" radius={[0, 8, 8, 0]}>
+          <Bar dataKey="receita" fill="#10b981" radius={[0, 8, 8, 0]}>
             {data.map((entry, index) => (
               <Cell key={`cell-${index}`} fill={entry.color || '#10b981'} />
             ))}

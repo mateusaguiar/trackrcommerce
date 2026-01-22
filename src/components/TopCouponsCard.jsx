@@ -75,7 +75,7 @@ export function TopCouponsCard({ data, loading, error }) {
             }}
             formatter={(value) => `R$ ${value.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`}
           />
-          <Bar dataKey="revenue" fill="#3b82f6" radius={[0, 8, 8, 0]} />
+          <Bar dataKey="receita" fill="#10b981" radius={[0, 8, 8, 0]} />
         </BarChart>
       </ResponsiveContainer>
     </div>

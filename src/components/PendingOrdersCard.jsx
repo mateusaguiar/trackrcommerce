@@ -105,7 +105,7 @@ export function PendingOrdersCard({ data, loading, error }) {
               }}
             />
             <Bar yAxisId="left" dataKey="receita" fill="#f97316" radius={[8, 8, 0, 0]} />
-            <Line yAxisId="right" type="monotone" dataKey="pedidos" stroke="#ec4899" strokeWidth={2} dot={{ fill: '#ec4899', r: 3 }} />
+            <Line yAxisId="right" type="monotone" dataKey="pedidos" stroke="#733509" strokeWidth={2} dot={{ fill: '#733509', r: 3 }} />
           </ComposedChart>
         </ResponsiveContainer>
       ) : null}

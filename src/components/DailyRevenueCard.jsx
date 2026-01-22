@@ -106,7 +106,7 @@ export function DailyRevenueCard({ data, loading, error }) {
             labelFormatter={(label) => `${label}`}
           />
           <Bar yAxisId="left" dataKey="receita" fill="#4f46e5" radius={[8, 8, 0, 0]} />
-          <Line yAxisId="right" type="monotone" dataKey="pedidos" stroke="#ec4899" strokeWidth={2} dot={{ fill: '#ec4899', r: 4 }} />
+          <Line yAxisId="right" type="monotone" dataKey="pedidos" stroke="#7d79d1" strokeWidth={2} dot={{ fill: '#7d79d1', r: 4 }} />
         </ComposedChart>
       </ResponsiveContainer>
     </div>
