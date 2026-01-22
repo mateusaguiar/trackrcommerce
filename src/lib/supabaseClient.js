@@ -1239,11 +1239,13 @@ export const dataFunctions = {
       // Group pending orders by date for chart
       const dailyPending = {};
       pendingOrders.forEach(order => {
-        const dateObj = new Date(order.sale_date);
-        const dateKey = dateObj.toISOString().split('T')[0];
-        const displayDate = dateObj.toLocaleDateString('pt-BR');
-        dailyPending[dateKey] = dailyPending[dateKey] || { display: displayDate, count: 0 };
-        dailyPending[dateKey].count += 1;
+        // Parse date ensuring UTC handling - use the date string directly
+        const dateString = order.sale_date.split('T')[0]; // Extract YYYY-MM-DD
+        const [year, month, day] = dateString.split('-');
+        const displayDate = `${day}/${month}/${year}`; // Format as DD/MM/YYYY
+        
+        dailyPending[dateString] = dailyPending[dateString] || { display: displayDate, count: 0 };
+        dailyPending[dateString].count += 1;
       });
 
       // Sort by date and format
