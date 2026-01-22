@@ -993,10 +993,10 @@ export const dataFunctions = {
     try {
       const { startDate, endDate } = filters;
       
-      // Fetch all conversions matching date filter (no pagination)
+      // Fetch all conversions matching date filter with coupon info (no pagination)
       let query = supabase
         .from('conversions')
-        .select('order_number, coupon_code, status')
+        .select('order_number, status, coupon_id, coupons(code)')
         .eq('brand_id', brandId)
         .eq('order_is_real', true);
       
@@ -1020,7 +1020,7 @@ export const dataFunctions = {
       // Get distinct coupon codes
       const couponCodes = [...new Set(
         (conversions || [])
-          .map(c => c.coupon_code)
+          .map(c => c.coupons?.code)
           .filter(Boolean)
       )].sort();
       

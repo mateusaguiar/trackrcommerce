@@ -326,6 +326,7 @@ export default function Dashboard() {
           startDate,
           endDate,
         });
+        console.log('Conversion filter values loaded:', result);
         setConversionFilterValues({
           orderIds: result.orderIds || [],
           couponCodes: result.couponCodes || [],
