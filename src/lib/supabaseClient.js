@@ -931,28 +931,57 @@ export const dataFunctions = {
     try {
       const { startDate, endDate } = filters;
       
-      // Fetch all coupons (no pagination)
+      // Fetch all coupons for the brand
       let couponQuery = supabase
         .from('coupons')
-        .select('code, influencer_id, influencers(name)')
-        .eq('brand_id', brandId)
-        .eq('is_real', true);
+        .select('id, code, influencer_id, influencers(name)')
+        .eq('brand_id', brandId);
       
       const { data: coupons, error: couponError } = await couponQuery;
       if (couponError) throw couponError;
       
-      // Get distinct coupon codes
-      const couponCodes = [...new Set(coupons.map(c => c.code))].sort();
+      if (!coupons || coupons.length === 0) {
+        return { couponCodes: [], influencerNames: [], error: null };
+      }
       
-      // Get distinct influencer names
+      const couponIds = coupons.map(c => c.id);
+      
+      // Fetch conversions for these coupons to filter by date range
+      let convQuery = supabase
+        .from('conversions')
+        .select('coupon_id')
+        .in('coupon_id', couponIds)
+        .eq('order_is_real', true);
+      
+      if (startDate) {
+        convQuery = convQuery.gte('sale_date', startDate.toISOString());
+      }
+      if (endDate) {
+        convQuery = convQuery.lte('sale_date', endDate.toISOString());
+      }
+      
+      const { data: conversions, error: convError } = await convQuery;
+      if (convError) throw convError;
+      
+      // Get coupon IDs that have conversions in the date range
+      const couponsWithConversions = new Set((conversions || []).map(c => c.coupon_id));
+      
+      // Filter coupons and get distinct values
+      const filteredCoupons = coupons.filter(c => couponsWithConversions.has(c.id));
+      
+      const couponCodes = [...new Set(
+        filteredCoupons.map(c => c.code).filter(Boolean)
+      )].sort();
+      
       const influencerNames = [...new Set(
-        coupons
+        filteredCoupons
           .filter(c => c.influencers?.name)
           .map(c => c.influencers.name)
       )].sort();
       
       return { couponCodes, influencerNames, error: null };
     } catch (error) {
+      console.error('Error in getCouponFilterValues:', error);
       return { couponCodes: [], influencerNames: [], error: error.message };
     }
   },
@@ -983,27 +1012,28 @@ export const dataFunctions = {
       
       // Get distinct order numbers
       const orderIds = [...new Set(
-        conversions
+        (conversions || [])
           .map(c => c.order_number)
           .filter(Boolean)
       )].sort();
       
       // Get distinct coupon codes
       const couponCodes = [...new Set(
-        conversions
+        (conversions || [])
           .map(c => c.coupon_code)
           .filter(Boolean)
       )].sort();
       
       // Get distinct statuses
       const statuses = [...new Set(
-        conversions
+        (conversions || [])
           .map(c => c.status)
           .filter(Boolean)
       )].sort();
       
       return { orderIds, couponCodes, statuses, error: null };
     } catch (error) {
+      console.error('Error in getConversionFilterValues:', error);
       return { orderIds: [], couponCodes: [], statuses: [], error: error.message };
     }
   },
