@@ -26,6 +26,14 @@ export default function Dashboard() {
   const [error, setError] = useState('');
   const [activeTab, setActiveTab] = useState('overview'); // overview, coupons, conversions
   
+  // Pagination metadata
+  const [totalCouponCount, setTotalCouponCount] = useState(0);
+  const [totalConversionCount, setTotalConversionCount] = useState(0);
+  
+  // Subtotals state
+  const [couponSubtotals, setCouponSubtotals] = useState({ totalUsage: 0, totalSales: 0 });
+  const [conversionSubtotals, setConversionSubtotals] = useState({ totalRevenue: 0, totalCommission: 0 });
+  
   // Date filter state (timezone: GMT-3 / America/São Paulo)
   const [startDate, setStartDate] = useState(() => {
     const d = new Date();
@@ -54,10 +62,15 @@ export default function Dashboard() {
   // Filter state for conversions
   const [selectedOrderId, setSelectedOrderId] = useState(''); // '' means show all
   const [selectedConversionCoupon, setSelectedConversionCoupon] = useState(''); // '' means show all
+  const [selectedStatus, setSelectedStatus] = useState(''); // '' means show all
 
   // Filter state for coupons
   const [selectedCouponCode, setSelectedCouponCode] = useState(''); // '' means show all
   const [selectedInfluencer, setSelectedInfluencer] = useState(''); // '' means show all
+
+  // Filter values (all possible values from date range)
+  const [couponFilterValues, setCouponFilterValues] = useState({ couponCodes: [], influencerNames: [] });
+  const [conversionFilterValues, setConversionFilterValues] = useState({ orderIds: [], couponCodes: [], statuses: [] });
 
   // Column visibility state for coupons
   const couponColumns = [
@@ -111,78 +124,6 @@ export default function Dashboard() {
             return aIndex - bIndex;
           })
     );
-  };
-
-  // Helper function to filter coupons
-  const getFilteredCoupons = (data) => {
-    return data.filter(coupon => {
-      const matchesCouponCode = !selectedCouponCode || coupon.code === selectedCouponCode;
-      const matchesInfluencer = !selectedInfluencer || coupon.influencer_name === selectedInfluencer;
-      return matchesCouponCode && matchesInfluencer;
-    });
-  };
-
-  // Helper function to sort coupons
-  const getSortedCoupons = (data) => {
-    const sorted = [...data].sort((a, b) => {
-      let aVal = a[couponSortBy];
-      let bVal = b[couponSortBy];
-
-      // Handle different data types
-      if (couponSortBy === 'created_at' || couponSortBy === 'last_usage') {
-        aVal = new Date(aVal || 0).getTime();
-        bVal = new Date(bVal || 0).getTime();
-      } else if (couponSortBy === 'usage_count' || couponSortBy === 'total_sales') {
-        aVal = Number(aVal || 0);
-        bVal = Number(bVal || 0);
-      } else if (couponSortBy === 'discount_value') {
-        aVal = Number(aVal || 0);
-        bVal = Number(bVal || 0);
-      } else {
-        aVal = String(aVal || '').toLowerCase();
-        bVal = String(bVal || '').toLowerCase();
-      }
-
-      if (aVal < bVal) return couponSortDirection === 'asc' ? -1 : 1;
-      if (aVal > bVal) return couponSortDirection === 'asc' ? 1 : -1;
-      return 0;
-    });
-    return sorted;
-  };
-
-  // Helper function to filter conversions
-  const getFilteredConversions = (data) => {
-    return data.filter(conv => {
-      const idVal = conv.order_number || conv.order_id;
-      const matchesOrder = !selectedOrderId || idVal === selectedOrderId;
-      const matchesCoupon = !selectedConversionCoupon || conv.coupon_code === selectedConversionCoupon;
-      return matchesOrder && matchesCoupon;
-    });
-  };
-
-  // Helper function to sort conversions
-  const getSortedConversions = (data) => {
-    const sorted = [...data].sort((a, b) => {
-      let aVal = a[conversionSortBy];
-      let bVal = b[conversionSortBy];
-
-      // Handle different data types
-      if (conversionSortBy === 'sale_date') {
-        aVal = new Date(aVal || 0).getTime();
-        bVal = new Date(bVal || 0).getTime();
-      } else if (conversionSortBy === 'order_amount' || conversionSortBy === 'commission_amount') {
-        aVal = Number(aVal || 0);
-        bVal = Number(bVal || 0);
-      } else {
-        aVal = String(aVal || '').toLowerCase();
-        bVal = String(bVal || '').toLowerCase();
-      }
-
-      if (aVal < bVal) return conversionSortDirection === 'asc' ? -1 : 1;
-      if (aVal > bVal) return conversionSortDirection === 'asc' ? 1 : -1;
-      return 0;
-    });
-    return sorted;
   };
 
   // Handle coupon column sort
@@ -273,23 +214,9 @@ export default function Dashboard() {
     setEndDate(date);
   };
 
-  // Pagination helpers for coupons (with filtering and sorting)
-  const filteredCoupons = getFilteredCoupons(coupons);
-  const sortedCoupons = getSortedCoupons(filteredCoupons);
-  const paginatedCoupons = sortedCoupons.slice(
-    (couponPage - 1) * couponsPerPage,
-    couponPage * couponsPerPage
-  );
-  const totalCouponPages = Math.ceil(sortedCoupons.length / couponsPerPage);
-
-  // Pagination helpers for conversions (with filtering and sorting)
-  const filteredConversions = getFilteredConversions(conversions);
-  const sortedConversions = getSortedConversions(filteredConversions);
-  const paginatedConversions = sortedConversions.slice(
-    (conversionPage - 1) * conversionsPerPage,
-    conversionPage * conversionsPerPage
-  );
-  const totalConversionPages = Math.ceil(sortedConversions.length / conversionsPerPage);
+  // Calculate total pages based on server counts
+  const totalCouponPages = Math.ceil(totalCouponCount / couponsPerPage);
+  const totalConversionPages = Math.ceil(totalConversionCount / conversionsPerPage);
 
   // Get current user and their brands on mount
   useEffect(() => {
@@ -357,20 +284,6 @@ export default function Dashboard() {
         });
         setMetrics(metricsResult.metrics);
 
-        // Get brand coupons with metrics and date filter
-        const couponsResult = await dataFunctions.getCouponsWithMetrics(selectedBrand.id, {
-          startDate,
-          endDate,
-        });
-        setCoupons(couponsResult.coupons || []);
-
-        // Get brand conversions with date filter
-        const conversionsResult = await dataFunctions.getBrandConversions(
-          selectedBrand.id,
-          { startDate, endDate }
-        );
-        setConversions(conversionsResult.conversions || []);
-
         setLoading(false);
       } catch (err) {
         setError(getErrorMessage(err));
@@ -380,6 +293,123 @@ export default function Dashboard() {
 
     loadBrandData();
   }, [selectedBrand, startDate, endDate]);
+
+  // Load filter values for coupons when brand or date changes
+  useEffect(() => {
+    if (!selectedBrand) return;
+
+    const loadCouponFilterValues = async () => {
+      try {
+        const result = await dataFunctions.getCouponFilterValues(selectedBrand.id, {
+          startDate,
+          endDate,
+        });
+        setCouponFilterValues({
+          couponCodes: result.couponCodes || [],
+          influencerNames: result.influencerNames || [],
+        });
+      } catch (err) {
+        console.error('Error loading coupon filter values:', err);
+      }
+    };
+
+    loadCouponFilterValues();
+  }, [selectedBrand, startDate, endDate]);
+
+  // Load filter values for conversions when brand or date changes
+  useEffect(() => {
+    if (!selectedBrand) return;
+
+    const loadConversionFilterValues = async () => {
+      try {
+        const result = await dataFunctions.getConversionFilterValues(selectedBrand.id, {
+          startDate,
+          endDate,
+        });
+        setConversionFilterValues({
+          orderIds: result.orderIds || [],
+          couponCodes: result.couponCodes || [],
+          statuses: result.statuses || [],
+        });
+      } catch (err) {
+        console.error('Error loading conversion filter values:', err);
+      }
+    };
+
+    loadConversionFilterValues();
+  }, [selectedBrand, startDate, endDate]);
+
+  // Load coupons with server-side pagination
+  useEffect(() => {
+    if (!selectedBrand) return;
+
+    const loadCoupons = async () => {
+      try {
+        const couponsResult = await dataFunctions.getCouponsWithMetrics(selectedBrand.id, {
+          page: couponPage,
+          limit: couponsPerPage,
+          sortBy: couponSortBy,
+          sortDirection: couponSortDirection,
+          couponCode: selectedCouponCode,
+          influencerName: selectedInfluencer,
+          startDate,
+          endDate,
+        });
+        setCoupons(couponsResult.coupons || []);
+        setTotalCouponCount(couponsResult.totalCount || 0);
+
+        // Load subtotals separately
+        const totalsResult = await dataFunctions.getCouponTotals(selectedBrand.id, {
+          couponCode: selectedCouponCode,
+          influencerName: selectedInfluencer,
+          startDate,
+          endDate,
+        });
+        setCouponSubtotals(totalsResult);
+      } catch (err) {
+        console.error('Error loading coupons:', err);
+      }
+    };
+
+    loadCoupons();
+  }, [selectedBrand, couponPage, couponsPerPage, couponSortBy, couponSortDirection, selectedCouponCode, selectedInfluencer, startDate, endDate]);
+
+  // Load conversions with server-side pagination
+  useEffect(() => {
+    if (!selectedBrand) return;
+
+    const loadConversions = async () => {
+      try {
+        const conversionsResult = await dataFunctions.getBrandConversions(selectedBrand.id, {
+          page: conversionPage,
+          limit: conversionsPerPage,
+          sortBy: conversionSortBy,
+          sortDirection: conversionSortDirection,
+          orderId: selectedOrderId,
+          couponCode: selectedConversionCoupon,
+          status: selectedStatus,
+          startDate,
+          endDate,
+        });
+        setConversions(conversionsResult.conversions || []);
+        setTotalConversionCount(conversionsResult.totalCount || 0);
+
+        // Load subtotals separately
+        const totalsResult = await dataFunctions.getBrandConversionTotals(selectedBrand.id, {
+          orderId: selectedOrderId,
+          couponCode: selectedConversionCoupon,
+          status: selectedStatus,
+          startDate,
+          endDate,
+        });
+        setConversionSubtotals(totalsResult);
+      } catch (err) {
+        console.error('Error loading conversions:', err);
+      }
+    };
+
+    loadConversions();
+  }, [selectedBrand, conversionPage, conversionsPerPage, conversionSortBy, conversionSortDirection, selectedOrderId, selectedConversionCoupon, selectedStatus, startDate, endDate]);
 
   const handleLogout = async () => {
     try {
@@ -704,7 +734,7 @@ export default function Dashboard() {
                           className="px-3 py-1 bg-zinc-800 border border-zinc-700 rounded text-sm text-white focus:border-indigo-500 focus:outline-none"
                         >
                           <option value="">Todos</option>
-                          {[...new Set(coupons.map(c => c.code))].sort().map((code) => (
+                          {couponFilterValues.couponCodes.map((code) => (
                             <option key={code} value={code}>{code}</option>
                           ))}
                         </select>
@@ -722,7 +752,7 @@ export default function Dashboard() {
                           className="px-3 py-1 bg-zinc-800 border border-zinc-700 rounded text-sm text-white focus:border-indigo-500 focus:outline-none"
                         >
                           <option value="">Todos</option>
-                          {[...new Set(coupons.map(c => c.influencer_name))].filter(Boolean).sort().map((influencer) => (
+                          {couponFilterValues.influencerNames.map((influencer) => (
                             <option key={influencer} value={influencer}>{influencer}</option>
                           ))}
                         </select>
@@ -750,10 +780,10 @@ export default function Dashboard() {
                               <td className="py-4 px-4 text-sm"></td>
                               <td className="py-4 px-4 text-sm"></td>
                               <td className="py-4 px-4 text-sm font-semibold text-zinc-300">
-                                {coupons.reduce((sum, coupon) => sum + coupon.usage_count, 0)}
+                                {couponSubtotals.totalUsage}
                               </td>
                               <td className="py-4 px-4 text-sm font-semibold text-emerald-400">
-                                R$ {coupons.reduce((sum, coupon) => sum + coupon.total_sales, 0).toLocaleString('pt-BR', {
+                                R$ {couponSubtotals.totalSales.toLocaleString('pt-BR', {
                                   minimumFractionDigits: 2,
                                 })}
                               </td>
@@ -837,7 +867,7 @@ export default function Dashboard() {
                             </tr>
                           </thead>
                           <tbody>
-                            {paginatedCoupons.map((coupon) => (
+                            {coupons.map((coupon) => (
                               <tr key={coupon.id} className="border-b border-zinc-800 hover:bg-zinc-900/50 transition">
                                 {visibleCouponColumns.includes('code') && (
                                   <td className="py-4 px-4">
@@ -904,8 +934,8 @@ export default function Dashboard() {
                       {/* Pagination Controls for Coupons */}
                       <div className="mt-4 flex items-center justify-between mb-6">
                         <span className="text-sm text-zinc-400">
-                          Mostrando {paginatedCoupons.length > 0 ? (couponPage - 1) * couponsPerPage + 1 : 0} a{' '}
-                          {Math.min(couponPage * couponsPerPage, coupons.length)} de {coupons.length} cupons
+                          Mostrando {coupons.length > 0 ? (couponPage - 1) * couponsPerPage + 1 : 0} a{' '}
+                          {Math.min(couponPage * couponsPerPage, totalCouponCount)} de {totalCouponCount} cupons
                         </span>
                         <div className="flex gap-2">
                           <button
@@ -999,12 +1029,9 @@ export default function Dashboard() {
                           className="px-3 py-1 bg-zinc-800 border border-zinc-700 rounded text-sm text-white focus:border-indigo-500 focus:outline-none"
                         >
                           <option value="">Todos</option>
-                          {[...new Set(conversions.map(c => c.order_number || c.order_id))]
-                            .filter(Boolean)
-                            .sort()
-                            .map((oid) => (
-                              <option key={oid} value={oid}>{oid}</option>
-                            ))}
+                          {conversionFilterValues.orderIds.map((oid) => (
+                            <option key={oid} value={oid}>{oid}</option>
+                          ))}
                         </select>
                       </div>
 
@@ -1020,12 +1047,29 @@ export default function Dashboard() {
                           className="px-3 py-1 bg-zinc-800 border border-zinc-700 rounded text-sm text-white focus:border-indigo-500 focus:outline-none"
                         >
                           <option value="">Todos</option>
-                          {[...new Set(conversions.map(c => c.coupon_code))]
-                            .filter(Boolean)
-                            .sort()
-                            .map((code) => (
-                              <option key={code} value={code}>{code}</option>
-                            ))}
+                          {conversionFilterValues.couponCodes.map((code) => (
+                            <option key={code} value={code}>{code}</option>
+                          ))}
+                        </select>
+                      </div>
+
+                      {/* Status Filter */}
+                      <div className="flex items-center gap-2">
+                        <label className="text-sm text-zinc-400">Status:</label>
+                        <select
+                          value={selectedStatus}
+                          onChange={(e) => {
+                            setSelectedStatus(e.target.value);
+                            setConversionPage(1);
+                          }}
+                          className="px-3 py-1 bg-zinc-800 border border-zinc-700 rounded text-sm text-white focus:border-indigo-500 focus:outline-none"
+                        >
+                          <option value="">Todos</option>
+                          {conversionFilterValues.statuses.map((status) => (
+                            <option key={status} value={status}>
+                              {status === 'paid' ? 'Pago' : status === 'confirmed' ? 'Confirmado' : status === 'completed' ? 'Completo' : status === 'pending' ? 'Pendente' : 'Cancelado'}
+                            </option>
+                          ))}
                         </select>
                       </div>
                     </div>
@@ -1050,12 +1094,12 @@ export default function Dashboard() {
                               </td>
                               <td className="py-4 px-4 text-sm"></td>
                               <td className="py-4 px-4 text-sm font-semibold text-emerald-400">
-                                R$ {conversions.reduce((sum, conv) => sum + parseFloat(conv.order_amount || 0), 0).toLocaleString('pt-BR', {
+                                R$ {conversionSubtotals.totalRevenue.toLocaleString('pt-BR', {
                                   minimumFractionDigits: 2,
                                 })}
                               </td>
                               <td className="py-4 px-4 text-sm font-semibold text-emerald-400">
-                                R$ {conversions.reduce((sum, conv) => sum + parseFloat(conv.commission_amount || 0), 0).toLocaleString('pt-BR', {
+                                R$ {conversionSubtotals.totalCommission.toLocaleString('pt-BR', {
                                   minimumFractionDigits: 2,
                                 })}
                               </td>
@@ -1122,7 +1166,7 @@ export default function Dashboard() {
                             </tr>
                           </thead>
                           <tbody>
-                            {paginatedConversions.map((conversion) => (
+                            {conversions.map((conversion) => (
                               <tr key={conversion.id} className="border-b border-zinc-800 hover:bg-zinc-900/50 transition">
                                 {visibleConversionColumns.includes('order_id') && (
                                   <td className="py-4 px-4">
@@ -1189,8 +1233,8 @@ export default function Dashboard() {
                       {/* Pagination Controls for Conversions */}
                       <div className="mt-4 flex items-center justify-between mb-6">
                         <span className="text-sm text-zinc-400">
-                          Mostrando {paginatedConversions.length > 0 ? (conversionPage - 1) * conversionsPerPage + 1 : 0} a{' '}
-                          {Math.min(conversionPage * conversionsPerPage, conversions.length)} de {conversions.length} vendas
+                          Mostrando {conversions.length > 0 ? (conversionPage - 1) * conversionsPerPage + 1 : 0} a{' '}
+                          {Math.min(conversionPage * conversionsPerPage, totalConversionCount)} de {totalConversionCount} vendas
                         </span>
                         <div className="flex gap-2">
                           <button
