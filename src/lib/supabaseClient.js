@@ -668,7 +668,7 @@ export const dataFunctions = {
         endDate
       } = filters;
 
-      // Get coupons with influencer details
+      // Get ALL coupons with influencer details (no date filter on coupons)
       let couponQuery = supabase
         .from('coupons')
         .select(`
@@ -681,33 +681,35 @@ export const dataFunctions = {
           influencer_id,
           brand_id,
           influencers(id, name, social_handle, commission_rate)
-        `, { count: 'exact' })
-        .eq('brand_id', brandId);
+        `)
+        .eq('brand_id', brandId)
+        .eq('is_real', true);
 
-      // Apply date range filter if provided
-      if (startDate) {
-        couponQuery = couponQuery.gte('created_at', startDate.toISOString());
-      }
-      if (endDate) {
-        couponQuery = couponQuery.lte('created_at', endDate.toISOString());
+      // Apply coupon code filter server-side
+      if (couponCode) {
+        couponQuery = couponQuery.eq('code', couponCode);
       }
 
-      // Apply sorting
-      const ascending = sortDirection === 'asc';
-      couponQuery = couponQuery.order(sortBy, { ascending });
-
-      // Apply pagination
-      const from = (page - 1) * limit;
-      const to = from + limit - 1;
-
-      const { data: coupons, error: couponError, count } = await couponQuery.range(from, to);
+      const { data: allCoupons, error: couponError } = await couponQuery;
 
       if (couponError) throw couponError;
 
-      // Get metrics for each coupon
+      if (couponError) throw couponError;
+
+      // Filter by influencer name before calculating metrics
+      let filteredCoupons = (allCoupons || []).map(c => ({
+        ...c,
+        influencer_name: c.influencers?.name || 'Sem influenciador'
+      }));
+
+      if (influencerName) {
+        filteredCoupons = filteredCoupons.filter(c => c.influencer_name === influencerName);
+      }
+
+      // Get metrics for filtered coupons
       const couponsWithMetrics = await Promise.all(
-        (coupons || []).map(async (coupon) => {
-          // Get conversions for this coupon
+        filteredCoupons.map(async (coupon) => {
+          // Get conversions for this coupon in the date range
           let convQuery = supabase
             .from('conversions')
             .select('order_amount, status, sale_date, order_is_real')
@@ -742,7 +744,7 @@ export const dataFunctions = {
 
           return {
             ...coupon,
-            influencer_name: coupon.influencers?.name || 'Sem influenciador',
+            influencer_name: coupon.influencer_name,
             usage_count,
             total_sales,
             last_usage,
@@ -750,18 +752,31 @@ export const dataFunctions = {
         })
       );
 
-      // Apply client-side filters for coupon code and influencer name
-      let filteredCoupons = couponsWithMetrics;
-      if (couponCode) {
-        filteredCoupons = filteredCoupons.filter(c => c.code === couponCode);
-      }
-      if (influencerName) {
-        filteredCoupons = filteredCoupons.filter(c => c.influencer_name === influencerName);
-      }
+      // Apply sorting
+      const ascending = sortDirection === 'asc';
+      couponsWithMetrics.sort((a, b) => {
+        let aVal = a[sortBy];
+        let bVal = b[sortBy];
+        
+        if (aVal === null || aVal === undefined) return 1;
+        if (bVal === null || bVal === undefined) return -1;
+        
+        if (typeof aVal === 'string') {
+          return ascending ? aVal.localeCompare(bVal) : bVal.localeCompare(aVal);
+        }
+        
+        return ascending ? aVal - bVal : bVal - aVal;
+      });
+
+      // Apply pagination
+      const totalCount = couponsWithMetrics.length;
+      const from = (page - 1) * limit;
+      const to = from + limit;
+      const paginatedCoupons = couponsWithMetrics.slice(from, to);
 
       return { 
-        coupons: filteredCoupons, 
-        totalCount: count || 0,
+        coupons: paginatedCoupons, 
+        totalCount,
         error: null 
       };
     } catch (error) {
@@ -781,7 +796,7 @@ export const dataFunctions = {
         endDate
       } = filters;
 
-      // Get all coupons with influencer details
+      // Get all coupons with influencer details (no date filter on coupons)
       let couponQuery = supabase
         .from('coupons')
         .select(`
@@ -789,29 +804,24 @@ export const dataFunctions = {
           code,
           influencers(name)
         `)
-        .eq('brand_id', brandId);
+        .eq('brand_id', brandId)
+        .eq('is_real', true);
 
-      // Apply date range filter if provided
-      if (startDate) {
-        couponQuery = couponQuery.gte('created_at', startDate.toISOString());
-      }
-      if (endDate) {
-        couponQuery = couponQuery.lte('created_at', endDate.toISOString());
+      // Apply coupon code filter server-side
+      if (couponCode) {
+        couponQuery = couponQuery.eq('code', couponCode);
       }
 
       const { data: coupons, error: couponError } = await couponQuery;
 
       if (couponError) throw couponError;
 
-      // Apply client-side filters
+      // Apply influencer name filter
       let filteredCoupons = (coupons || []).map(c => ({
         ...c,
         influencer_name: c.influencers?.name || 'Sem influenciador'
       }));
 
-      if (couponCode) {
-        filteredCoupons = filteredCoupons.filter(c => c.code === couponCode);
-      }
       if (influencerName) {
         filteredCoupons = filteredCoupons.filter(c => c.influencer_name === influencerName);
       }
