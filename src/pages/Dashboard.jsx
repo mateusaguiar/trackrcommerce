@@ -10,8 +10,11 @@ import {
   RefreshCw,
   ArrowUp,
   ArrowDown,
+  Settings,
 } from 'lucide-react';
 import { Button } from '../components/Button.jsx';
+import { CouponClassificationModal } from '../components/CouponClassificationModal.jsx';
+import { CouponEditorModal } from '../components/CouponEditorModal.jsx';
 import { authFunctions, dataFunctions, getErrorMessage } from '../lib/supabaseClient.js';
 
 export default function Dashboard() {
@@ -72,9 +75,16 @@ export default function Dashboard() {
   const [couponFilterValues, setCouponFilterValues] = useState({ couponCodes: [], influencerNames: [] });
   const [conversionFilterValues, setConversionFilterValues] = useState({ orderIds: [], couponCodes: [], statuses: [] });
 
+  // Classification state
+  const [couponClassifications, setCouponClassifications] = useState([]);
+  const [showClassificationModal, setShowClassificationModal] = useState(false);
+  const [showCouponEditorModal, setShowCouponEditorModal] = useState(false);
+  const [selectedCouponForEdit, setSelectedCouponForEdit] = useState(null);
+
   // Column visibility state for coupons
   const couponColumns = [
     { key: 'code', label: 'Código' },
+    { key: 'classification', label: 'Classificação' },
     { key: 'influencer_name', label: 'Influenciador' },
     { key: 'discount', label: 'Desconto' },
     { key: 'usage_count', label: 'Usos' },
@@ -339,6 +349,40 @@ export default function Dashboard() {
 
     loadConversionFilterValues();
   }, [selectedBrand, startDate, endDate]);
+
+  // Load coupon classifications when brand changes
+  useEffect(() => {
+    if (!selectedBrand) return;
+
+    const loadClassifications = async () => {
+      try {
+        const result = await dataFunctions.getCouponClassifications(selectedBrand.id);
+        if (result.error) throw new Error(result.error);
+        setCouponClassifications(result.classifications || []);
+      } catch (err) {
+        console.error('Error loading classifications:', err);
+      }
+    };
+
+    loadClassifications();
+  }, [selectedBrand]);
+
+  // Helper to get classification by ID
+  const getClassificationById = (classificationId) => {
+    return couponClassifications.find(c => c.id === classificationId);
+  };
+
+  // Helper to get classification label
+  const getClassificationLabel = (classificationId) => {
+    const classification = getClassificationById(classificationId);
+    return classification?.name || 'Sem classificação';
+  };
+
+  // Helper to get classification color
+  const getClassificationColor = (classificationId) => {
+    const classification = getClassificationById(classificationId);
+    return classification?.color || '#6366f1';
+  };
 
   // Load coupons with server-side pagination
   useEffect(() => {
@@ -714,10 +758,20 @@ export default function Dashboard() {
                 <div>
                   <div className="flex items-center justify-between mb-6">
                     <h2 className="text-2xl font-bold">Cupons</h2>
-                    <Button variant="primary">
-                      <Plus size={18} className="mr-2" />
-                      Novo Cupom
-                    </Button>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => setShowClassificationModal(true)}
+                        className="flex items-center gap-2 px-4 py-2 bg-zinc-700 hover:bg-zinc-600 border border-zinc-600 rounded-lg text-sm font-medium transition"
+                        title="Gerenciar classificações"
+                      >
+                        <Settings size={18} />
+                        Classificações
+                      </button>
+                      <Button variant="primary">
+                        <Plus size={18} className="mr-2" />
+                        Novo Cupom
+                      </Button>
+                    </div>
                   </div>
 
                   {/* Column Filter and Pagination Controls */}
@@ -809,6 +863,11 @@ export default function Dashboard() {
                                   Código {renderSortIcon('code', true)}
                                 </th>
                               )}
+                              {visibleCouponColumns.includes('classification') && (
+                                <th className="text-left py-4 px-4 text-sm font-medium text-zinc-400">
+                                  Classificação
+                                </th>
+                              )}
                               {visibleCouponColumns.includes('influencer_name') && (
                                 <th 
                                   onClick={() => handleCouponSort('influencer_name')}
@@ -875,6 +934,24 @@ export default function Dashboard() {
                                     <span className="font-mono font-bold text-indigo-400">{coupon.code}</span>
                                   </td>
                                 )}
+                                {visibleCouponColumns.includes('classification') && (
+                                  <td className="py-4 px-4 text-sm">
+                                    {coupon.classification ? (
+                                      <span
+                                        className="px-3 py-1 rounded text-xs font-medium text-white inline-flex items-center gap-2"
+                                        style={{ backgroundColor: getClassificationColor(coupon.classification) + '20', borderLeft: `3px solid ${getClassificationColor(coupon.classification)}` }}
+                                      >
+                                        <span
+                                          className="w-2 h-2 rounded-full"
+                                          style={{ backgroundColor: getClassificationColor(coupon.classification) }}
+                                        />
+                                        {getClassificationLabel(coupon.classification)}
+                                      </span>
+                                    ) : (
+                                      <span className="text-zinc-500 italic text-xs">Sem classificação</span>
+                                    )}
+                                  </td>
+                                )}
                                 {visibleCouponColumns.includes('influencer_name') && (
                                   <td className="py-4 px-4 text-sm">{coupon.influencer_name || 'N/A'}</td>
                                 )}
@@ -926,6 +1003,17 @@ export default function Dashboard() {
                                     {new Date(coupon.created_at).toLocaleDateString('pt-BR')}
                                   </td>
                                 )}
+                                <td className="py-4 px-4">
+                                  <button
+                                    onClick={() => {
+                                      setSelectedCouponForEdit(coupon);
+                                      setShowCouponEditorModal(true);
+                                    }}
+                                    className="text-xs px-3 py-1 bg-indigo-600 hover:bg-indigo-700 rounded transition font-medium"
+                                  >
+                                    Classificar
+                                  </button>
+                                </td>
                               </tr>
                             ))}
                           </tbody>
@@ -1006,6 +1094,41 @@ export default function Dashboard() {
                       Nenhum cupom criado ainda
                     </div>
                   )}
+
+                  {/* Modals */}
+                  <CouponClassificationModal
+                    brandId={selectedBrand?.id}
+                    isOpen={showClassificationModal}
+                    onClose={() => setShowClassificationModal(false)}
+                    onUpdate={() => {
+                      // Reload classifications
+                      const loadClassifications = async () => {
+                        try {
+                          const result = await dataFunctions.getCouponClassifications(selectedBrand.id);
+                          if (!result.error) {
+                            setCouponClassifications(result.classifications || []);
+                          }
+                        } catch (err) {
+                          console.error('Error loading classifications:', err);
+                        }
+                      };
+                      loadClassifications();
+                    }}
+                  />
+
+                  <CouponEditorModal
+                    coupon={selectedCouponForEdit}
+                    classifications={couponClassifications}
+                    isOpen={showCouponEditorModal}
+                    onClose={() => {
+                      setShowCouponEditorModal(false);
+                      setSelectedCouponForEdit(null);
+                    }}
+                    onUpdate={() => {
+                      // Reload coupons by resetting pagination
+                      setCouponPage(1);
+                    }}
+                  />
                 </div>
               )}
 

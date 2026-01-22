@@ -1037,6 +1037,102 @@ export const dataFunctions = {
       return { orderIds: [], couponCodes: [], statuses: [], error: error.message };
     }
   },
+
+  // Get all classifications for a brand
+  async getCouponClassifications(brandId) {
+    try {
+      const { data, error } = await supabase
+        .from('coupon_classifications')
+        .select('*')
+        .eq('brand_id', brandId)
+        .eq('is_active', true)
+        .order('name', { ascending: true });
+
+      if (error) throw error;
+      return { classifications: data || [], error: null };
+    } catch (err) {
+      return { classifications: [], error: getErrorMessage(err) };
+    }
+  },
+
+  // Create a new classification
+  async createCouponClassification(brandId, { name, description, color }) {
+    try {
+      const { data, error } = await supabase
+        .from('coupon_classifications')
+        .insert([
+          {
+            brand_id: brandId,
+            name,
+            description,
+            color,
+            is_active: true,
+          },
+        ])
+        .select();
+
+      if (error) throw error;
+      return { classification: data?.[0], error: null };
+    } catch (err) {
+      return { classification: null, error: getErrorMessage(err) };
+    }
+  },
+
+  // Update a classification
+  async updateCouponClassificationItem(classificationId, { name, description, color, is_active }) {
+    try {
+      const { data, error } = await supabase
+        .from('coupon_classifications')
+        .update({
+          name,
+          description,
+          color,
+          is_active,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', classificationId)
+        .select();
+
+      if (error) throw error;
+      return { classification: data?.[0], error: null };
+    } catch (err) {
+      return { classification: null, error: getErrorMessage(err) };
+    }
+  },
+
+  // Soft delete a classification
+  async deleteCouponClassification(classificationId) {
+    try {
+      const { error } = await supabase
+        .from('coupon_classifications')
+        .update({ is_active: false })
+        .eq('id', classificationId);
+
+      if (error) throw error;
+      return { error: null };
+    } catch (err) {
+      return { error: getErrorMessage(err) };
+    }
+  },
+
+  // Assign classification to a coupon
+  async assignCouponClassification(couponId, classificationId) {
+    try {
+      const { data, error } = await supabase
+        .from('coupons')
+        .update({
+          classification: classificationId,
+          classification_updated_at: new Date().toISOString(),
+        })
+        .eq('id', couponId)
+        .select();
+
+      if (error) throw error;
+      return { coupon: data?.[0], error: null };
+    } catch (err) {
+      return { coupon: null, error: getErrorMessage(err) };
+    }
+  },
 };
 
 // ============================================
