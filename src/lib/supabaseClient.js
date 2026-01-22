@@ -1078,7 +1078,8 @@ export const dataFunctions = {
 
       return { data: sorted, error: null };
     } catch (err) {
-      return { data: [], error: getErrorMessage(err) };
+      console.error('Error in getDailyRevenue:', err);
+      return { data: [], error: err.message || String(err) };
     }
   },
 
@@ -1129,7 +1130,8 @@ export const dataFunctions = {
 
       return { data: sorted, error: null };
     } catch (err) {
-      return { data: [], error: getErrorMessage(err) };
+      console.error('Error in getTopClassifications:', err);
+      return { data: [], error: err.message || String(err) };
     }
   },
 
@@ -1172,7 +1174,8 @@ export const dataFunctions = {
 
       return { data: sorted, error: null };
     } catch (err) {
-      return { data: [], error: getErrorMessage(err) };
+      console.error('Error in getTopCoupons:', err);
+      return { data: [], error: err.message || String(err) };
     }
   },
 
@@ -1210,7 +1213,8 @@ export const dataFunctions = {
         error: null
       };
     } catch (err) {
-      return { data: { revenue: 0, count: 0 }, error: getErrorMessage(err) };
+      console.error('Error in getPendingOrders:', err);
+      return { data: { revenue: 0, count: 0 }, error: err.message || String(err) };
     }
   },
 
@@ -1316,6 +1320,9 @@ export const dataFunctions = {
 // ============================================
 
 export const getErrorMessage = (error) => {
+  // Handle error objects
+  const errorString = typeof error === 'string' ? error : (error?.message || error?.error_description || String(error));
+  
   const errorMap = {
     'Invalid login credentials': 'E-mail ou senha incorretos',
     'Email not confirmed': 'Por favor, confirme seu e-mail antes de fazer login',
@@ -1325,7 +1332,7 @@ export const getErrorMessage = (error) => {
     'Supabase not configured': 'Supabase não está configurado',
   };
 
-  return errorMap[error] || error || 'Erro desconhecido. Por favor, tente novamente.';
+  return errorMap[errorString] || errorString || 'Erro desconhecido. Por favor, tente novamente.';
 };
 
 export default supabase;
