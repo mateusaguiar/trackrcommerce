@@ -317,9 +317,6 @@ export default function Dashboard() {
     loadBrandData();
   }, [selectedBrand, startDate, endDate]);
 
-  // Load filter values for coupons when brand or date changes
-  useEffect(() => {
-
   // Load overview metrics (daily revenue, top classifications, top coupons, pending orders)
   useEffect(() => {
     if (!selectedBrand) return;
@@ -356,6 +353,9 @@ export default function Dashboard() {
 
     loadOverviewMetrics();
   }, [selectedBrand, startDate, endDate]);
+
+  // Load filter values for coupons when brand or date changes
+  useEffect(() => {
     if (!selectedBrand) return;
 
     const loadCouponFilterValues = async () => {
