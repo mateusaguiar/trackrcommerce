@@ -680,6 +680,8 @@ export const dataFunctions = {
           created_at,
           influencer_id,
           brand_id,
+          classification,
+          classification_updated_at,
           influencers(id, name, social_handle, commission_rate)
         `)
         .eq('brand_id', brandId);

@@ -74,12 +74,13 @@ export default function Dashboard() {
   // Filter values (all possible values from date range)
   const [couponFilterValues, setCouponFilterValues] = useState({ couponCodes: [], influencerNames: [] });
   const [conversionFilterValues, setConversionFilterValues] = useState({ orderIds: [], couponCodes: [], statuses: [] });
-
   // Classification state
   const [couponClassifications, setCouponClassifications] = useState([]);
   const [showClassificationModal, setShowClassificationModal] = useState(false);
   const [showCouponEditorModal, setShowCouponEditorModal] = useState(false);
   const [selectedCouponForEdit, setSelectedCouponForEdit] = useState(null);
+  // Force refresh token for coupons list
+  const [couponsRefreshToken, setCouponsRefreshToken] = useState(0);
 
   // Column visibility state for coupons
   const couponColumns = [
@@ -417,7 +418,7 @@ export default function Dashboard() {
     };
 
     loadCoupons();
-  }, [selectedBrand, couponPage, couponsPerPage, couponSortBy, couponSortDirection, selectedCouponCode, selectedInfluencer, startDate, endDate]);
+  }, [selectedBrand, couponPage, couponsPerPage, couponSortBy, couponSortDirection, selectedCouponCode, selectedInfluencer, startDate, endDate, couponsRefreshToken]);
 
   // Load conversions with server-side pagination
   useEffect(() => {
@@ -1124,9 +1125,21 @@ export default function Dashboard() {
                       setShowCouponEditorModal(false);
                       setSelectedCouponForEdit(null);
                     }}
-                    onUpdate={() => {
-                      // Reload coupons by resetting pagination
-                      setCouponPage(1);
+                    onUpdate={(updatedCoupon) => {
+                      // Optimistically update local coupons state
+                      if (updatedCoupon?.id) {
+                        setCoupons((prev) => prev.map((c) => (
+                          c.id === updatedCoupon.id
+                            ? {
+                                ...c,
+                                classification: updatedCoupon.classification,
+                                classification_updated_at: updatedCoupon.classification_updated_at,
+                              }
+                            : c
+                        )));
+                      }
+                      // Then force a re-fetch for eventual consistency
+                      setCouponsRefreshToken((t) => t + 1);
                     }}
                   />
                 </div>
