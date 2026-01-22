@@ -720,7 +720,7 @@ export default function Dashboard() {
                   </div>
 
                   {/* Column Filter and Pagination Controls */}
-                  {!loading && coupons.length > 0 && (
+                  {!loading && (couponFilterValues.couponCodes.length > 0 || couponFilterValues.influencerNames.length > 0) && (
                     <div className="mb-4 flex flex-col items-start gap-3">
                       {/* Coupon Code Filter */}
                       <div className="flex items-center gap-2">
@@ -1015,7 +1015,7 @@ export default function Dashboard() {
                     <h2 className="text-2xl font-bold">Vendas Recentes</h2>
                   </div>
                   {/* Filters Column */}
-                  {!loading && conversions.length > 0 && (
+                  {!loading && (conversionFilterValues.orderIds.length > 0 || conversionFilterValues.couponCodes.length > 0 || conversionFilterValues.statuses.length > 0) && (
                     <div className="mb-4 flex flex-col items-start gap-3">
                       {/* Order ID Filter */}
                       <div className="flex items-center gap-2">
