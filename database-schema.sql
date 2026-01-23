@@ -114,6 +114,7 @@ CREATE TABLE IF NOT EXISTS public.conversions (
   commission_amount numeric NOT NULL,
   status text,
   sale_date timestamp with time zone DEFAULT now(),
+    sale_date_br_tmz timestamp with time zone,
   metadata jsonb,
   order_is_real boolean NOT NULL DEFAULT true,
   customer_id text,
@@ -177,6 +178,7 @@ CREATE INDEX IF NOT EXISTS idx_conversions_brand_id ON public.conversions(brand_
 CREATE INDEX IF NOT EXISTS idx_conversions_coupon_id ON public.conversions(coupon_id);
 CREATE INDEX IF NOT EXISTS idx_conversions_status ON public.conversions(status);
 CREATE INDEX IF NOT EXISTS idx_conversions_sale_date ON public.conversions(sale_date);
+CREATE INDEX IF NOT EXISTS idx_conversions_sale_date_br_tmz ON public.conversions(sale_date_br_tmz);
 CREATE INDEX IF NOT EXISTS idx_conversions_order_is_real ON public.conversions(order_is_real);
 
 -- UTM data indexes

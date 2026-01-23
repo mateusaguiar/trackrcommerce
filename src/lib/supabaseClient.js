@@ -238,7 +238,7 @@ export const dataFunctions = {
       const { 
         page = 1, 
         limit = 20, 
-        sortBy = 'sale_date', 
+        sortBy = 'sale_date_br_tmz', 
         sortDirection = 'desc',
         orderId,
         couponCode,
@@ -257,7 +257,7 @@ export const dataFunctions = {
           order_amount,
           commission_amount,
           status,
-          sale_date,
+          sale_date_br_tmz,
           order_is_real,
           customer_id,
           customer_email,
@@ -278,10 +278,10 @@ export const dataFunctions = {
       }
 
       if (startDate) {
-        query = query.gte('sale_date', startDate.toISOString());
+        query = query.gte('sale_date_br_tmz', startDate.toISOString());
       }
       if (endDate) {
-        query = query.lte('sale_date', endDate.toISOString());
+        query = query.lte('sale_date_br_tmz', endDate.toISOString());
       }
 
       // Client-side filters (after fetching) for order_id and coupon_code
@@ -363,10 +363,10 @@ export const dataFunctions = {
       }
 
       if (startDate) {
-        query = query.gte('sale_date', startDate.toISOString());
+        query = query.gte('sale_date_br_tmz', startDate.toISOString());
       }
       if (endDate) {
-        query = query.lte('sale_date', endDate.toISOString());
+        query = query.lte('sale_date_br_tmz', endDate.toISOString());
       }
 
       const { data, error } = await query;
@@ -414,7 +414,7 @@ export const dataFunctions = {
           order_amount,
           commission_amount,
           status,
-          sale_date,
+          sale_date_br_tmz,
           coupon_id,
           brand_id,
           coupons(id, code, influencer_id),
@@ -426,7 +426,7 @@ export const dataFunctions = {
         query = query.eq('brand_id', brandId);
       }
 
-      const { data, error } = await query.order('sale_date', { ascending: false });
+      const { data, error } = await query.order('sale_date_br_tmz', { ascending: false });
 
       if (error) throw error;
 
@@ -544,10 +544,10 @@ export const dataFunctions = {
 
       // Apply date range filter if provided
       if (filters.startDate) {
-        convQuery = convQuery.gte('sale_date', filters.startDate.toISOString());
+        convQuery = convQuery.gte('sale_date_br_tmz', filters.startDate.toISOString());
       }
       if (filters.endDate) {
-        convQuery = convQuery.lte('sale_date', filters.endDate.toISOString());
+        convQuery = convQuery.lte('sale_date_br_tmz', filters.endDate.toISOString());
       }
 
       const { data: conversions, error: convError } = await convQuery;
@@ -636,7 +636,7 @@ export const dataFunctions = {
           order_amount,
           commission_amount,
           status,
-          sale_date,
+          sale_date_br_tmz,
           order_is_real,
           customer_id,
           customer_email,
@@ -724,16 +724,16 @@ export const dataFunctions = {
           // Get conversions for this coupon in the date range
           let convQuery = supabase
             .from('conversions')
-            .select('order_amount, status, sale_date, order_is_real')
+            .select('order_amount, status, sale_date_br_tmz, order_is_real')
             .eq('coupon_id', coupon.id)
             .eq('order_is_real', true);
 
           // Apply date filters for conversions
           if (startDate) {
-            convQuery = convQuery.gte('sale_date', startDate.toISOString());
+            convQuery = convQuery.gte('sale_date_br_tmz', startDate.toISOString());
           }
           if (endDate) {
-            convQuery = convQuery.lte('sale_date', endDate.toISOString());
+            convQuery = convQuery.lte('sale_date_br_tmz', endDate.toISOString());
           }
 
           const { data: conversions, error: convError } = await convQuery;
@@ -751,7 +751,7 @@ export const dataFunctions = {
             0
           );
           const last_usage = realConversions.length > 0
-            ? new Date(Math.max(...realConversions.map(c => new Date(c.sale_date).getTime())))
+            ? new Date(Math.max(...realConversions.map(c => new Date(c.sale_date_br_tmz).getTime())))
             : null;
 
           return {
@@ -852,10 +852,10 @@ export const dataFunctions = {
 
       // Apply date filters for conversions
       if (startDate) {
-        convQuery = convQuery.gte('sale_date', startDate.toISOString());
+        convQuery = convQuery.gte('sale_date_br_tmz', startDate.toISOString());
       }
       if (endDate) {
-        convQuery = convQuery.lte('sale_date', endDate.toISOString());
+        convQuery = convQuery.lte('sale_date_br_tmz', endDate.toISOString());
       }
 
       const { data: conversions, error: convError } = await convQuery;
@@ -969,10 +969,10 @@ export const dataFunctions = {
         .eq('order_is_real', true);
       
       if (startDate) {
-        convQuery = convQuery.gte('sale_date', startDate.toISOString());
+        convQuery = convQuery.gte('sale_date_br_tmz', startDate.toISOString());
       }
       if (endDate) {
-        convQuery = convQuery.lte('sale_date', endDate.toISOString());
+        convQuery = convQuery.lte('sale_date_br_tmz', endDate.toISOString());
       }
       
       const { data: conversions, error: convError } = await convQuery;
@@ -1016,10 +1016,10 @@ export const dataFunctions = {
         .eq('order_is_real', true);
       
       if (startDate) {
-        query = query.gte('sale_date', startDate.toISOString());
+        query = query.gte('sale_date_br_tmz', startDate.toISOString());
       }
       if (endDate) {
-        query = query.lte('sale_date', endDate.toISOString());
+        query = query.lte('sale_date_br_tmz', endDate.toISOString());
       }
       
       const { data: conversions, error } = await query;
@@ -1058,34 +1058,30 @@ export const dataFunctions = {
     try {
       let query = supabase
         .from('conversions')
-        .select('order_amount, sale_date, status, order_id')
+        .select('order_amount, sale_date_br_tmz, status, order_id')
         .eq('brand_id', brandId)
         .eq('order_is_real', true)
         .in('status', ['authorized', 'paid']); // Only count authorized and paid orders
 
       if (filters.startDate) {
         const startDateStr = formatDateForQuery(filters.startDate, false);
-        query = query.gte('sale_date', startDateStr);
+        query = query.gte('sale_date_br_tmz', startDateStr);
       }
       if (filters.endDate) {
         const endDateStr = formatDateForQuery(filters.endDate, true);
-        query = query.lt('sale_date', endDateStr);
+        query = query.lt('sale_date_br_tmz', endDateStr);
       }
 
       const { data, error } = await query;
       if (error) throw error;
 
       // Group by date and sum revenue, count DISTINCT order_ids
-      // Convert to São Paulo timezone for date grouping
       const dailyData = {};
       const processedOrders = {}; // Track unique orders per date
       
       (data || []).forEach(conv => {
-        // Convert UTC timestamp to São Paulo timezone date
-        const utcDate = new Date(conv.sale_date);
-        // Subtract 3 hours to convert from UTC to GMT-03 (São Paulo)
-        const saoPauloDate = new Date(utcDate.getTime() - (3 * 60 * 60 * 1000));
-        const dateString = saoPauloDate.toISOString().split('T')[0];
+        // Extract date from sale_date_br_tmz (already in GMT-03)
+        const dateString = conv.sale_date_br_tmz.split('T')[0];
         const [year, month, day] = dateString.split('-');
         const displayDate = `${day}/${month}/${year}`;
         
@@ -1126,18 +1122,18 @@ export const dataFunctions = {
       // First, get conversions with coupon classification IDs
       let convQuery = supabase
         .from('conversions')
-        .select('order_amount, status, coupon_id, coupons(classification)')
+        .select('order_amount, sale_date_br_tmz, status, coupon_id, coupons(classification)')
         .eq('brand_id', brandId)
         .eq('order_is_real', true)
         .in('status', ['authorized', 'paid']); // Only count authorized and paid orders
 
       if (filters.startDate) {
         const startDateStr = formatDateForQuery(filters.startDate, false);
-        convQuery = convQuery.gte('sale_date', startDateStr);
+        convQuery = convQuery.gte('sale_date_br_tmz', startDateStr);
       }
       if (filters.endDate) {
         const endDateStr = formatDateForQuery(filters.endDate, true);
-        convQuery = convQuery.lt('sale_date', endDateStr);
+        convQuery = convQuery.lt('sale_date_br_tmz', endDateStr);
       }
 
       const { data: conversions, error: convError } = await convQuery;
@@ -1203,18 +1199,18 @@ export const dataFunctions = {
     try {
       let query = supabase
         .from('conversions')
-        .select('order_amount, status, coupons(code)')
+        .select('order_amount, sale_date_br_tmz, status, coupons(code)')
         .eq('brand_id', brandId)
         .eq('order_is_real', true)
         .in('status', ['authorized', 'paid']); // Only count authorized and paid orders
 
       if (filters.startDate) {
         const startDateStr = formatDateForQuery(filters.startDate, false);
-        query = query.gte('sale_date', startDateStr);
+        query = query.gte('sale_date_br_tmz', startDateStr);
       }
       if (filters.endDate) {
         const endDateStr = formatDateForQuery(filters.endDate, true);
-        query = query.lt('sale_date', endDateStr);
+        query = query.lt('sale_date_br_tmz', endDateStr);
       }
 
       const { data, error } = await query;
@@ -1251,18 +1247,18 @@ export const dataFunctions = {
     try {
       let query = supabase
         .from('conversions')
-        .select('order_amount, status, sale_date')
+        .select('order_amount, status, sale_date_br_tmz')
         .eq('brand_id', brandId)
         .eq('status', 'pending')
         .eq('order_is_real', true);
 
       if (filters.startDate) {
         const startDateStr = formatDateForQuery(filters.startDate, false);
-        query = query.gte('sale_date', startDateStr);
+        query = query.gte('sale_date_br_tmz', startDateStr);
       }
       if (filters.endDate) {
         const endDateStr = formatDateForQuery(filters.endDate, true);
-        query = query.lt('sale_date', endDateStr);
+        query = query.lt('sale_date_br_tmz', endDateStr);
       }
 
       const { data, error } = await query;
@@ -1277,8 +1273,8 @@ export const dataFunctions = {
       // Group pending orders by date for chart
       const dailyPending = {};
       pendingOrders.forEach(order => {
-        // Parse date ensuring UTC handling - use the date string directly
-        const dateString = order.sale_date.split('T')[0]; // Extract YYYY-MM-DD
+        // Extract date from sale_date_br_tmz (already in GMT-03)
+        const dateString = order.sale_date_br_tmz.split('T')[0]; // Extract YYYY-MM-DD
         const [year, month, day] = dateString.split('-');
         const displayDate = `${day}/${month}/${year}`; // Format as DD/MM/YYYY
         
