@@ -347,15 +347,35 @@ export const dataFunctions = {
             const totalRevenue = (rpcData || []).reduce((sum, r) => sum + parseFloat(r.valor || 0), 0);
 
             // Sum commissions server-side to avoid row truncation
-            const { data: comData, error: comErr } = await supabase
-              .from('conversions')
-              .select('sum_commission:sum(commission_amount)')
-              .eq('brand_id', brandId)
-              .eq('order_is_real', !includeTestOrders ? true : undefined)
-              .gte('sale_date_br_tmz', s)
-              .lt('sale_date_br_tmz', e);
-            if (comErr) throw comErr;
-            const totalCommission = parseFloat((comData && comData[0] && (comData[0].sum_commission || 0)) || 0);
+            let totalCommission = 0;
+            try {
+              const { data: comData, error: comErr } = await supabase
+                .from('conversions')
+                .select('sum_commission:sum(commission_amount)')
+                .eq('brand_id', brandId)
+                .eq('order_is_real', !includeTestOrders ? true : undefined)
+                .gte('sale_date_br_tmz', s)
+                .lt('sale_date_br_tmz', e);
+              if (comErr) throw comErr;
+              totalCommission = parseFloat((comData && comData[0] && (comData[0].sum_commission || 0)) || 0);
+            } catch (aggErr) {
+              // If PostgREST aggregate select fails (PGRST200), fall back to client-side sum
+              if (aggErr && aggErr.code === 'PGRST200') {
+                console.warn('Aggregate select failed (PGRST200). Falling back to client-side commission sum.');
+                const { data: rows, error: rowsErr } = await supabase
+                  .from('conversions')
+                  .select('commission_amount')
+                  .eq('brand_id', brandId)
+                  .eq('order_is_real', !includeTestOrders ? true : undefined)
+                  .gte('sale_date_br_tmz', s)
+                  .lt('sale_date_br_tmz', e);
+                if (!rowsErr && rows) {
+                  totalCommission = rows.reduce((sum, r) => sum + parseFloat(r.commission_amount || 0), 0);
+                }
+              } else {
+                throw aggErr;
+              }
+            }
 
             return { totalRevenue, totalCommission, error: null };
           }
@@ -365,12 +385,31 @@ export const dataFunctions = {
         }
 
         // Fallback: aggregate directly from conversions table (server-side)
-        const { data: aggFallback, error: aggFallbackErr } = await supabase
-          .from('conversions')
-          .select('sum_val:sum(order_amount), sum_commission:sum(commission_amount)', { head: false });
-        if (aggFallbackErr) throw aggFallbackErr;
-        const totalRevenue = parseFloat((aggFallback && aggFallback[0] && (aggFallback[0].sum_val || 0)) || 0);
-        const totalCommission = parseFloat((aggFallback && aggFallback[0] && (aggFallback[0].sum_commission || 0)) || 0);
+        let totalRevenue = 0;
+        let totalCommission = 0;
+        try {
+          const { data: aggFallback, error: aggFallbackErr } = await supabase
+            .from('conversions')
+            .select('sum_val:sum(order_amount), sum_commission:sum(commission_amount)', { head: false });
+          if (aggFallbackErr) throw aggFallbackErr;
+          totalRevenue = parseFloat((aggFallback && aggFallback[0] && (aggFallback[0].sum_val || 0)) || 0);
+          totalCommission = parseFloat((aggFallback && aggFallback[0] && (aggFallback[0].sum_commission || 0)) || 0);
+        } catch (aggFallbackErr) {
+          // If aggregate alias select fails (PGRST200), fallback to client-side full fetch and sum
+          if (aggFallbackErr && aggFallbackErr.code === 'PGRST200') {
+            console.warn('Aggregate fallback failed (PGRST200). Falling back to client-side full aggregation.');
+            const { data: rows, error: rowsErr } = await supabase
+              .from('conversions')
+              .select('order_amount, commission_amount')
+              .eq('brand_id', brandId);
+            if (!rowsErr && rows) {
+              totalRevenue = rows.reduce((sum, r) => sum + parseFloat(r.order_amount || 0), 0);
+              totalCommission = rows.reduce((sum, r) => sum + parseFloat(r.commission_amount || 0), 0);
+            }
+          } else {
+            throw aggFallbackErr;
+          }
+        }
 
         return { totalRevenue, totalCommission, error: null };
       }
@@ -870,19 +909,38 @@ export const dataFunctions = {
       if (countErr) throw countErr;
 
       // Sum order_amount server-side for these coupons
-      const { data: sumData, error: sumErr } = await supabase
-        .from('conversions')
-        .select('sum_val:sum(order_amount)')
-        .in('coupon_id', couponIds)
-        .eq('order_is_real', true)
-        .in('status', ['paid', 'confirmed', 'completed'])
-        .gte('sale_date_br_tmz', s)
-        .lt('sale_date_br_tmz', e);
-
-      if (sumErr) throw sumErr;
-
-      const totalUsage = usageCount || 0;
-      const totalSales = parseFloat((sumData && sumData[0] && (sumData[0].sum_val || 0)) || 0);
+      let totalUsage = usageCount || 0;
+      let totalSales = 0;
+      try {
+        const { data: sumData, error: sumErr } = await supabase
+          .from('conversions')
+          .select('sum_val:sum(order_amount)')
+          .in('coupon_id', couponIds)
+          .eq('order_is_real', true)
+          .in('status', ['paid','authorized'])
+          .gte('sale_date_br_tmz', s)
+          .lt('sale_date_br_tmz', e);
+        if (sumErr) throw sumErr;
+        totalSales = parseFloat((sumData && sumData[0] && (sumData[0].sum_val || 0)) || 0);
+      } catch (sumErr) {
+        if (sumErr && sumErr.code === 'PGRST200') {
+          console.warn('Aggregate sum for coupons failed (PGRST200). Falling back to client-side sum.');
+          const { data: rows, error: rowsErr } = await supabase
+            .from('conversions')
+            .select('order_amount, status')
+            .in('coupon_id', couponIds)
+            .eq('order_is_real', true)
+            .in('status', ['paid','authorized'])
+            .gte('sale_date_br_tmz', s)
+            .lt('sale_date_br_tmz', e);
+          if (!rowsErr && rows) {
+            totalSales = rows.reduce((sum, r) => sum + parseFloat(r.order_amount || 0), 0);
+            totalUsage = rows.length;
+          }
+        } else {
+          throw sumErr;
+        }
+      }
 
       return {
         totalUsage,
