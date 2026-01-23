@@ -238,7 +238,7 @@ export const dataFunctions = {
       const { 
         page = 1, 
         limit = 20, 
-        sortBy = 'sale_date', 
+        sortBy = 'sale_date_br_tmz', 
         sortDirection = 'desc',
         orderId,
         couponCode,
@@ -247,6 +247,9 @@ export const dataFunctions = {
         endDate,
         includeTestOrders = false
       } = filters;
+      // Build base query with pagination and exact count
+      const from = (page - 1) * limit;
+      const to = from + limit - 1;
 
       let query = supabase
         .from('conversions')
@@ -257,7 +260,7 @@ export const dataFunctions = {
           order_amount,
           commission_amount,
           status,
-          sale_date,
+          sale_date_br_tmz,
           order_is_real,
           customer_id,
           customer_email,
@@ -267,137 +270,183 @@ export const dataFunctions = {
         `, { count: 'exact' })
         .eq('brand_id', brandId);
 
-      // Filter out test orders by default
       if (!includeTestOrders) {
         query = query.eq('order_is_real', true);
       }
 
-      // Apply filters
       if (status) {
         query = query.eq('status', status);
       }
 
       if (startDate) {
-        query = query.gte('sale_date', startDate.toISOString());
+        const s = formatDateForQuery(startDate, false);
+        query = query.gte('sale_date_br_tmz', s);
       }
       if (endDate) {
-        query = query.lte('sale_date', endDate.toISOString());
+        const e = formatDateForQuery(endDate, true);
+        query = query.lt('sale_date_br_tmz', e);
       }
 
-      // Client-side filters (after fetching) for order_id and coupon_code
-      // We'll apply these after getting the data since they involve joined tables
-
-      // Apply sorting
+      // Sorting
       const ascending = sortDirection === 'asc';
       query = query.order(sortBy, { ascending });
 
-      // Apply pagination
-      const from = (page - 1) * limit;
-      const to = from + limit - 1;
-      
+      // Range / pagination
       const { data, error, count } = await query.range(from, to);
-
       if (error) throw error;
 
-      // Transform data to flatten coupon code
-      let transformedData = (data || []).map(conversion => ({
-        ...conversion,
-        coupon_code: conversion.coupons?.code || 'N/A',
+      // Map coupon_code and apply client-side simple filters (orderId, couponCode)
+      let mapped = (data || []).map(c => ({
+        ...c,
+        coupon_code: c.coupons?.code || 'N/A'
       }));
 
-      // Apply client-side filters for orderId and couponCode
       if (orderId) {
-        transformedData = transformedData.filter(c => 
-          (c.order_number || c.order_id) === orderId
-        );
+        mapped = mapped.filter(c => (c.order_number || c.order_id) === orderId);
       }
       if (couponCode) {
-        transformedData = transformedData.filter(c => c.coupon_code === couponCode);
+        mapped = mapped.filter(c => c.coupon_code === couponCode);
       }
 
-      return { 
-        conversions: transformedData, 
+      return {
+        conversions: mapped,
         totalCount: count || 0,
-        error: null 
+        error: null,
       };
     } catch (error) {
       return { conversions: [], totalCount: 0, error: error.message };
     }
   },
 
-  // Get conversion totals for subtotals row
+  // Get totals for conversions (used for subtotals row)
   getBrandConversionTotals: async (brandId, filters = {}) => {
     if (!supabase) throw new Error('Supabase not configured');
-    
+
     try {
-      const { 
+      const {
         orderId,
         couponCode,
         status,
         startDate,
         endDate,
-        includeTestOrders = false
+        includeTestOrders = false,
       } = filters;
+      const s = startDate ? formatDateForQuery(startDate, false) : '1970-01-01';
+      const e = endDate ? formatDateForQuery(endDate, true) : formatDateForQuery(new Date(), true);
 
-      let query = supabase
-        .from('conversions')
-        .select(`
-          order_amount,
-          commission_amount,
-          order_id,
-          order_number,
-          status,
-          coupon_id,
-          coupons(code)
-        `)
-        .eq('brand_id', brandId);
+      // If there are no specific order/coupon filters, use RPC to get full revenue/orders
+      if (!orderId && !couponCode) {
+        // Prefer RPC for revenue/orders when available
+        try {
+          const { data: rpcData, error: rpcErr } = await supabase.rpc('get_daily_revenue', {
+            p_brand_id: brandId,
+            p_start_date: s,
+            p_end_date: e,
+          });
+          if (!rpcErr && rpcData) {
+            const totalRevenue = (rpcData || []).reduce((sum, r) => sum + parseFloat(r.valor || 0), 0);
 
-      // Filter out test orders by default
-      if (!includeTestOrders) {
-        query = query.eq('order_is_real', true);
+            // Sum commissions server-side to avoid row truncation
+            let totalCommission = 0;
+            try {
+              const { data: comData, error: comErr } = await supabase
+                .from('conversions')
+                .select('sum_commission:sum(commission_amount)')
+                .eq('brand_id', brandId)
+                .eq('order_is_real', !includeTestOrders ? true : undefined)
+                .gte('sale_date_br_tmz', s)
+                .lt('sale_date_br_tmz', e);
+              if (comErr) throw comErr;
+              totalCommission = parseFloat((comData && comData[0] && (comData[0].sum_commission || 0)) || 0);
+            } catch (aggErr) {
+              // If PostgREST aggregate select fails (PGRST200), fall back to client-side sum
+              if (aggErr && aggErr.code === 'PGRST200') {
+                console.warn('Aggregate select failed (PGRST200). Falling back to client-side commission sum.');
+                const { data: rows, error: rowsErr } = await supabase
+                  .from('conversions')
+                  .select('commission_amount')
+                  .eq('brand_id', brandId)
+                  .eq('order_is_real', !includeTestOrders ? true : undefined)
+                  .gte('sale_date_br_tmz', s)
+                  .lt('sale_date_br_tmz', e);
+                if (!rowsErr && rows) {
+                  totalCommission = rows.reduce((sum, r) => sum + parseFloat(r.commission_amount || 0), 0);
+                }
+              } else {
+                throw aggErr;
+              }
+            }
+
+            return { totalRevenue, totalCommission, error: null };
+          }
+        } catch (rpcEx) {
+          // RPC not available or failed — fall back to server-side aggregates
+          console.warn('get_daily_revenue RPC failed, falling back to aggregates:', rpcEx?.message || rpcEx);
+        }
+
+        // Fallback: aggregate directly from conversions table (server-side)
+        let totalRevenue = 0;
+        let totalCommission = 0;
+        try {
+          const { data: aggFallback, error: aggFallbackErr } = await supabase
+            .from('conversions')
+            .select('sum_val:sum(order_amount), sum_commission:sum(commission_amount)', { head: false });
+          if (aggFallbackErr) throw aggFallbackErr;
+          totalRevenue = parseFloat((aggFallback && aggFallback[0] && (aggFallback[0].sum_val || 0)) || 0);
+          totalCommission = parseFloat((aggFallback && aggFallback[0] && (aggFallback[0].sum_commission || 0)) || 0);
+        } catch (aggFallbackErr) {
+          // If aggregate alias select fails (PGRST200), fallback to client-side full fetch and sum
+          if (aggFallbackErr && aggFallbackErr.code === 'PGRST200') {
+            console.warn('Aggregate fallback failed (PGRST200). Falling back to client-side full aggregation.');
+            const { data: rows, error: rowsErr } = await supabase
+              .from('conversions')
+              .select('order_amount, commission_amount')
+              .eq('brand_id', brandId);
+            if (!rowsErr && rows) {
+              totalRevenue = rows.reduce((sum, r) => sum + parseFloat(r.order_amount || 0), 0);
+              totalCommission = rows.reduce((sum, r) => sum + parseFloat(r.commission_amount || 0), 0);
+            }
+          } else {
+            throw aggFallbackErr;
+          }
+        }
+
+        return { totalRevenue, totalCommission, error: null };
       }
 
-      // Apply filters
-      if (status) {
-        query = query.eq('status', status);
-      }
-
-      if (startDate) {
-        query = query.gte('sale_date', startDate.toISOString());
-      }
-      if (endDate) {
-        query = query.lte('sale_date', endDate.toISOString());
-      }
-
-      const { data, error } = await query;
-
-      if (error) throw error;
-
-      // Apply client-side filters and calculate totals
-      let filteredData = (data || []).map(c => ({
-        ...c,
-        coupon_code: c.coupons?.code || 'N/A'
-      }));
-
-      if (orderId) {
-        filteredData = filteredData.filter(c => 
-          (c.order_number || c.order_id) === orderId
-        );
-      }
+      // Otherwise, fall back to targeted server-side aggregates with filters
+      // Resolve couponId if couponCode provided
+      let couponId = null;
       if (couponCode) {
-        filteredData = filteredData.filter(c => c.coupon_code === couponCode);
+        const { data: couponRow, error: couponErr } = await supabase
+          .from('coupons')
+          .select('id')
+          .eq('brand_id', brandId)
+          .eq('code', couponCode)
+          .maybeSingle();
+        if (couponErr) throw couponErr;
+        couponId = couponRow?.id || null;
+        if (!couponId) {
+          return { totalRevenue: 0, totalCommission: 0, error: null };
+        }
       }
 
-      const totalRevenue = filteredData.reduce((sum, c) => sum + parseFloat(c.order_amount || 0), 0);
-      const totalCommission = filteredData.reduce((sum, c) => sum + parseFloat(c.commission_amount || 0), 0);
+      // Build base filter for aggregated queries
+      let base = supabase.from('conversions').select('sum_val:sum(order_amount), sum_commission:sum(commission_amount)', { count: 'exact' });
+      base = base.eq('brand_id', brandId).eq('order_is_real', !includeTestOrders ? true : undefined).gte('sale_date_br_tmz', s).lt('sale_date_br_tmz', e);
+      if (status) base = base.eq('status', status);
+      if (couponId) base = base.eq('coupon_id', couponId);
+      if (orderId) base = base.or(`order_number.eq.${orderId},order_id.eq.${orderId}`);
 
-      return { 
-        totalRevenue,
-        totalCommission,
-        error: null 
-      };
-    } catch (error) {
-      return { totalRevenue: 0, totalCommission: 0, error: error.message };
+      const { data: aggData, error: aggErr } = await base;
+      if (aggErr) throw aggErr;
+
+      const totalRevenue = parseFloat((aggData && aggData[0] && (aggData[0].sum_val || 0)) || 0);
+      const totalCommission = parseFloat((aggData && aggData[0] && (aggData[0].sum_commission || 0)) || 0);
+
+      return { totalRevenue, totalCommission, error: null };
+    } catch (err) {
+      return { totalRevenue: 0, totalCommission: 0, error: err.message };
     }
   },
 
@@ -414,7 +463,7 @@ export const dataFunctions = {
           order_amount,
           commission_amount,
           status,
-          sale_date,
+          sale_date_br_tmz,
           coupon_id,
           brand_id,
           coupons(id, code, influencer_id),
@@ -426,7 +475,7 @@ export const dataFunctions = {
         query = query.eq('brand_id', brandId);
       }
 
-      const { data, error } = await query.order('sale_date', { ascending: false });
+      const { data, error } = await query.order('sale_date_br_tmz', { ascending: false });
 
       if (error) throw error;
 
@@ -544,10 +593,10 @@ export const dataFunctions = {
 
       // Apply date range filter if provided
       if (filters.startDate) {
-        convQuery = convQuery.gte('sale_date', filters.startDate.toISOString());
+        convQuery = convQuery.gte('sale_date_br_tmz', filters.startDate.toISOString());
       }
       if (filters.endDate) {
-        convQuery = convQuery.lte('sale_date', filters.endDate.toISOString());
+        convQuery = convQuery.lte('sale_date_br_tmz', filters.endDate.toISOString());
       }
 
       const { data: conversions, error: convError } = await convQuery;
@@ -581,9 +630,9 @@ export const dataFunctions = {
       if (influencerError) throw influencerError;
 
       // Calculate metrics from actual data
-      // Include all successful statuses: 'paid', 'confirmed', 'completed'
+      // Include all successful statuses: 'paid', 'confirmed', 'completed', 'authorized'
       const confirmedConversions = (conversions || []).filter(
-        conv => conv.status === 'paid' || conv.status === 'confirmed' || conv.status === 'completed'
+        conv => conv.status === 'paid' || conv.status === 'confirmed' || conv.status === 'completed' || conv.status === 'authorized'
       );
 
       const total_revenue = confirmedConversions.reduce(
@@ -636,7 +685,7 @@ export const dataFunctions = {
           order_amount,
           commission_amount,
           status,
-          sale_date,
+          sale_date_br_tmz,
           order_is_real,
           customer_id,
           customer_email,
@@ -724,16 +773,16 @@ export const dataFunctions = {
           // Get conversions for this coupon in the date range
           let convQuery = supabase
             .from('conversions')
-            .select('order_amount, status, sale_date, order_is_real')
+            .select('order_amount, status, sale_date_br_tmz, order_is_real')
             .eq('coupon_id', coupon.id)
             .eq('order_is_real', true);
 
           // Apply date filters for conversions
           if (startDate) {
-            convQuery = convQuery.gte('sale_date', startDate.toISOString());
+            convQuery = convQuery.gte('sale_date_br_tmz', startDate.toISOString());
           }
           if (endDate) {
-            convQuery = convQuery.lte('sale_date', endDate.toISOString());
+            convQuery = convQuery.lte('sale_date_br_tmz', endDate.toISOString());
           }
 
           const { data: conversions, error: convError } = await convQuery;
@@ -751,7 +800,7 @@ export const dataFunctions = {
             0
           );
           const last_usage = realConversions.length > 0
-            ? new Date(Math.max(...realConversions.map(c => new Date(c.sale_date).getTime())))
+            ? new Date(Math.max(...realConversions.map(c => new Date(c.sale_date_br_tmz).getTime())))
             : null;
 
           return {
@@ -843,40 +892,60 @@ export const dataFunctions = {
         return { totalUsage: 0, totalSales: 0, error: null };
       }
 
-      // Get conversions for these coupons
-      let convQuery = supabase
+      // Use server-side aggregates to avoid client-side row truncation
+      const s = startDate ? formatDateForQuery(startDate, false) : '1970-01-01';
+      const e = endDate ? formatDateForQuery(endDate, true) : formatDateForQuery(new Date(), true);
+
+      // Count successful conversions for these coupons (server-side count)
+      const { count: usageCount, error: countErr } = await supabase
         .from('conversions')
-        .select('order_amount, status, coupon_id')
+        .select('id', { head: true, count: 'exact' })
         .in('coupon_id', couponIds)
-        .eq('order_is_real', true);
+        .eq('order_is_real', true)
+        .in('status', ['paid', 'confirmed', 'completed'])
+        .gte('sale_date_br_tmz', s)
+        .lt('sale_date_br_tmz', e);
 
-      // Apply date filters for conversions
-      if (startDate) {
-        convQuery = convQuery.gte('sale_date', startDate.toISOString());
+      if (countErr) throw countErr;
+
+      // Sum order_amount server-side for these coupons
+      let totalUsage = usageCount || 0;
+      let totalSales = 0;
+      try {
+        const { data: sumData, error: sumErr } = await supabase
+          .from('conversions')
+          .select('sum_val:sum(order_amount)')
+          .in('coupon_id', couponIds)
+          .eq('order_is_real', true)
+          .in('status', ['paid','authorized'])
+          .gte('sale_date_br_tmz', s)
+          .lt('sale_date_br_tmz', e);
+        if (sumErr) throw sumErr;
+        totalSales = parseFloat((sumData && sumData[0] && (sumData[0].sum_val || 0)) || 0);
+      } catch (sumErr) {
+        if (sumErr && sumErr.code === 'PGRST200') {
+          console.warn('Aggregate sum for coupons failed (PGRST200). Falling back to client-side sum.');
+          const { data: rows, error: rowsErr } = await supabase
+            .from('conversions')
+            .select('order_amount, status')
+            .in('coupon_id', couponIds)
+            .eq('order_is_real', true)
+            .in('status', ['paid','authorized'])
+            .gte('sale_date_br_tmz', s)
+            .lt('sale_date_br_tmz', e);
+          if (!rowsErr && rows) {
+            totalSales = rows.reduce((sum, r) => sum + parseFloat(r.order_amount || 0), 0);
+            totalUsage = rows.length;
+          }
+        } else {
+          throw sumErr;
+        }
       }
-      if (endDate) {
-        convQuery = convQuery.lte('sale_date', endDate.toISOString());
-      }
 
-      const { data: conversions, error: convError } = await convQuery;
-
-      if (convError) throw convError;
-
-      // Calculate totals
-      const realConversions = (conversions || []).filter(
-        c => c.status === 'paid' || c.status === 'confirmed' || c.status === 'completed'
-      );
-
-      const totalUsage = realConversions.length;
-      const totalSales = realConversions.reduce(
-        (sum, conv) => sum + parseFloat(conv.order_amount || 0),
-        0
-      );
-
-      return { 
+      return {
         totalUsage,
         totalSales,
-        error: null 
+        error: null,
       };
     } catch (error) {
       return { totalUsage: 0, totalSales: 0, error: error.message };
@@ -969,10 +1038,10 @@ export const dataFunctions = {
         .eq('order_is_real', true);
       
       if (startDate) {
-        convQuery = convQuery.gte('sale_date', startDate.toISOString());
+        convQuery = convQuery.gte('sale_date_br_tmz', startDate.toISOString());
       }
       if (endDate) {
-        convQuery = convQuery.lte('sale_date', endDate.toISOString());
+        convQuery = convQuery.lte('sale_date_br_tmz', endDate.toISOString());
       }
       
       const { data: conversions, error: convError } = await convQuery;
@@ -1016,10 +1085,10 @@ export const dataFunctions = {
         .eq('order_is_real', true);
       
       if (startDate) {
-        query = query.gte('sale_date', startDate.toISOString());
+        query = query.gte('sale_date_br_tmz', startDate.toISOString());
       }
       if (endDate) {
-        query = query.lte('sale_date', endDate.toISOString());
+        query = query.lte('sale_date_br_tmz', endDate.toISOString());
       }
       
       const { data: conversions, error } = await query;
@@ -1056,50 +1125,37 @@ export const dataFunctions = {
   // Get daily revenue for chart
   getDailyRevenue: async (brandId, filters = {}) => {
     try {
-      let query = supabase
-        .from('conversions')
-        .select('order_amount, sale_date, status')
-        .eq('brand_id', brandId)
-        .eq('order_is_real', true);
+      // Prepare date range parameters (use wide defaults if not provided)
+      const startDateStr = filters.startDate ? formatDateForQuery(filters.startDate, false) : '1970-01-01';
+      const endDateStr = filters.endDate ? formatDateForQuery(filters.endDate, true) : formatDateForQuery(new Date(), true);
 
-      if (filters.startDate) {
-        const startDateStr = formatDateForQuery(filters.startDate, false);
-        query = query.gte('sale_date', startDateStr);
-      }
-      if (filters.endDate) {
-        const endDateStr = formatDateForQuery(filters.endDate, true);
-        query = query.lt('sale_date', endDateStr);
-      }
-
-      const { data, error } = await query;
+      // Call Postgres RPC to aggregate on the server (no row-limit issues)
+      const { data, error } = await supabase.rpc('get_daily_revenue', {
+        p_brand_id: brandId,
+        p_start_date: startDateStr,
+        p_end_date: endDateStr,
+      });
       if (error) throw error;
 
-      // Group by date and sum revenue, count orders
-      const dailyData = {};
-      (data || []).forEach(conv => {
-        if (conv.status === 'paid' || conv.status === 'confirmed' || conv.status === 'completed') {
-          const dateString = conv.sale_date.split('T')[0];
-          const [year, month, day] = dateString.split('-');
-          const displayDate = `${day}/${month}/${year}`;
-          
-          dailyData[dateString] = dailyData[dateString] || { display: displayDate, revenue: 0, count: 0 };
-          dailyData[dateString].revenue += parseFloat(conv.order_amount || 0);
-          dailyData[dateString].count += 1;
-        }
-      });
-
-      // Sort by date ascending and format
-      const sorted = Object.keys(dailyData)
-        .sort()
-        .map(dateKey => ({
-          date: dailyData[dateKey].display,
-          receita: parseFloat(dailyData[dateKey].revenue.toFixed(2)),
-          pedidos: dailyData[dateKey].count
-        }));
+      // Data rows: { sale_date: 'YYYY-MM-DD', valor, quant_pedidos }
+      const sorted = (data || [])
+        .map(r => ({
+          date: (() => {
+            const [y, m, d] = (r.sale_date || '').toString().split('-');
+            return `${d}/${m}/${y}`;
+          })(),
+          receita: parseFloat((r.valor || 0).toString()),
+          pedidos: parseInt(r.quant_pedidos || 0, 10)
+        }))
+        .sort((a, b) => {
+          // sort by date ascending (DD/MM/YYYY -> compare YYYYMMDD)
+          const toKey = s => s.date.split('/').reverse().join('');
+          return toKey(a) < toKey(b) ? -1 : toKey(a) > toKey(b) ? 1 : 0;
+        });
 
       return { data: sorted, error: null };
     } catch (err) {
-      console.error('Error in getDailyRevenue:', err);
+      console.error('Error in getDailyRevenue (RPC):', err);
       return { data: [], error: err.message || String(err) };
     }
   },
@@ -1110,17 +1166,18 @@ export const dataFunctions = {
       // First, get conversions with coupon classification IDs
       let convQuery = supabase
         .from('conversions')
-        .select('order_amount, status, coupon_id, coupons(classification)')
+        .select('order_amount, sale_date_br_tmz, status, coupon_id, coupons(classification)')
         .eq('brand_id', brandId)
-        .eq('order_is_real', true);
+        .eq('order_is_real', true)
+        .in('status', ['authorized', 'paid']); // Only count authorized and paid orders
 
       if (filters.startDate) {
         const startDateStr = formatDateForQuery(filters.startDate, false);
-        convQuery = convQuery.gte('sale_date', startDateStr);
+        convQuery = convQuery.gte('sale_date_br_tmz', startDateStr);
       }
       if (filters.endDate) {
         const endDateStr = formatDateForQuery(filters.endDate, true);
-        convQuery = convQuery.lt('sale_date', endDateStr);
+        convQuery = convQuery.lt('sale_date_br_tmz', endDateStr);
       }
 
       const { data: conversions, error: convError } = await convQuery;
@@ -1144,27 +1201,25 @@ export const dataFunctions = {
       // Group by classification and sum revenue
       const classData = {};
       (conversions || []).forEach(conv => {
-        if (conv.status === 'paid' || conv.status === 'confirmed' || conv.status === 'completed') {
-          const classId = conv.coupons?.classification;
+        const classId = conv.coupons?.classification;
+        
+        if (classId && classMap[classId]) {
+          const className = classMap[classId].name;
+          const classColor = classMap[classId].color;
+          const key = `${classId}`;
           
-          if (classId && classMap[classId]) {
-            const className = classMap[classId].name;
-            const classColor = classMap[classId].color;
-            const key = `${classId}`;
-            
-            if (!classData[key]) {
-              classData[key] = { name: className, color: classColor, revenue: 0 };
-            }
-            classData[key].revenue += parseFloat(conv.order_amount || 0);
-          } else {
-            // Handle uncategorized coupons
+          if (!classData[key]) {
+            classData[key] = { name: className, color: classColor, revenue: 0 };
+          }
+          classData[key].revenue += parseFloat(conv.order_amount || 0);
+        } else {
+          // Handle uncategorized coupons
             const key = 'uncategorized';
             if (!classData[key]) {
               classData[key] = { name: 'Sem classificação', color: '#6366f1', revenue: 0 };
             }
             classData[key].revenue += parseFloat(conv.order_amount || 0);
           }
-        }
       });
 
       // Sort by revenue descending and take top 5
@@ -1188,17 +1243,18 @@ export const dataFunctions = {
     try {
       let query = supabase
         .from('conversions')
-        .select('order_amount, status, coupons(code)')
+        .select('order_amount, sale_date_br_tmz, status, coupons(code)')
         .eq('brand_id', brandId)
-        .eq('order_is_real', true);
+        .eq('order_is_real', true)
+        .in('status', ['authorized', 'paid']); // Only count authorized and paid orders
 
       if (filters.startDate) {
         const startDateStr = formatDateForQuery(filters.startDate, false);
-        query = query.gte('sale_date', startDateStr);
+        query = query.gte('sale_date_br_tmz', startDateStr);
       }
       if (filters.endDate) {
         const endDateStr = formatDateForQuery(filters.endDate, true);
-        query = query.lt('sale_date', endDateStr);
+        query = query.lt('sale_date_br_tmz', endDateStr);
       }
 
       const { data, error } = await query;
@@ -1207,12 +1263,10 @@ export const dataFunctions = {
       // Group by coupon code and sum revenue
       const couponData = {};
       (data || []).forEach(conv => {
-        if (conv.status === 'paid' || conv.status === 'confirmed' || conv.status === 'completed') {
-          const code = conv.coupons?.code;
-          // Skip orders without coupons
-          if (code && code !== 'N/A') {
-            couponData[code] = (couponData[code] || 0) + parseFloat(conv.order_amount || 0);
-          }
+        const code = conv.coupons?.code;
+        // Skip orders without coupons
+        if (code && code !== 'N/A') {
+          couponData[code] = (couponData[code] || 0) + parseFloat(conv.order_amount || 0);
         }
       });
 
@@ -1237,18 +1291,18 @@ export const dataFunctions = {
     try {
       let query = supabase
         .from('conversions')
-        .select('order_amount, status, sale_date')
+        .select('order_amount, status, sale_date_br_tmz')
         .eq('brand_id', brandId)
         .eq('status', 'pending')
         .eq('order_is_real', true);
 
       if (filters.startDate) {
         const startDateStr = formatDateForQuery(filters.startDate, false);
-        query = query.gte('sale_date', startDateStr);
+        query = query.gte('sale_date_br_tmz', startDateStr);
       }
       if (filters.endDate) {
         const endDateStr = formatDateForQuery(filters.endDate, true);
-        query = query.lt('sale_date', endDateStr);
+        query = query.lt('sale_date_br_tmz', endDateStr);
       }
 
       const { data, error } = await query;
@@ -1263,8 +1317,8 @@ export const dataFunctions = {
       // Group pending orders by date for chart
       const dailyPending = {};
       pendingOrders.forEach(order => {
-        // Parse date ensuring UTC handling - use the date string directly
-        const dateString = order.sale_date.split('T')[0]; // Extract YYYY-MM-DD
+        // Extract date from sale_date_br_tmz (already in GMT-03)
+        const dateString = order.sale_date_br_tmz.split('T')[0]; // Extract YYYY-MM-DD
         const [year, month, day] = dateString.split('-');
         const displayDate = `${day}/${month}/${year}`; // Format as DD/MM/YYYY
         

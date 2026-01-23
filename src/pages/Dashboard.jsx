@@ -63,7 +63,7 @@ export default function Dashboard() {
   const [couponSortDirection, setCouponSortDirection] = useState('desc'); // 'asc' or 'desc'
 
   // Sorting state for conversions
-  const [conversionSortBy, setConversionSortBy] = useState('sale_date');
+  const [conversionSortBy, setConversionSortBy] = useState('sale_date_br_tmz');
   const [conversionSortDirection, setConversionSortDirection] = useState('desc'); // 'asc' or 'desc'
 
   // Filter state for conversions
@@ -117,7 +117,7 @@ export default function Dashboard() {
     { key: 'order_amount', label: 'Valor' },
     { key: 'commission_amount', label: 'Comissão' },
     { key: 'status', label: 'Status' },
-    { key: 'sale_date', label: 'Data' },
+    { key: 'sale_date_br_tmz', label: 'Data' },
   ];
   const [visibleConversionColumns, setVisibleConversionColumns] = useState(
     conversionColumns.map(col => col.key)
@@ -1285,12 +1285,12 @@ export default function Dashboard() {
                                   Status {renderSortIcon('status', false)}
                                 </th>
                               )}
-                              {visibleConversionColumns.includes('sale_date') && (
+                              {visibleConversionColumns.includes('sale_date_br_tmz') && (
                                 <th 
-                                  onClick={() => handleConversionSort('sale_date')}
+                                  onClick={() => handleConversionSort('sale_date_br_tmz')}
                                   className="text-left py-4 px-4 text-sm font-medium text-zinc-400 cursor-pointer hover:text-zinc-200 transition"
                                 >
-                                  Data {renderSortIcon('sale_date', false)}
+                                  Data {renderSortIcon('sale_date_br_tmz', false)}
                                 </th>
                               )}
                             </tr>
@@ -1351,9 +1351,9 @@ export default function Dashboard() {
                                     </span>
                                   </td>
                                 )}
-                                {visibleConversionColumns.includes('sale_date') && (
+                                {visibleConversionColumns.includes('sale_date_br_tmz') && (
                                   <td className="py-4 px-4 text-sm text-zinc-400">
-                                    {new Date(conversion.sale_date).toLocaleDateString('pt-BR')}
+                                    {new Date(conversion.sale_date_br_tmz).toLocaleDateString('pt-BR')}
                                   </td>
                                 )}
                               </tr>
