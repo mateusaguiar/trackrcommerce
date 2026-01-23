@@ -581,9 +581,9 @@ export const dataFunctions = {
       if (influencerError) throw influencerError;
 
       // Calculate metrics from actual data
-      // Include all successful statuses: 'paid', 'confirmed', 'completed'
+      // Include all successful statuses: 'paid', 'confirmed', 'completed', 'authorized'
       const confirmedConversions = (conversions || []).filter(
-        conv => conv.status === 'paid' || conv.status === 'confirmed' || conv.status === 'completed'
+        conv => conv.status === 'paid' || conv.status === 'confirmed' || conv.status === 'completed' || conv.status === 'authorized'
       );
 
       const total_revenue = confirmedConversions.reduce(
@@ -1060,7 +1060,8 @@ export const dataFunctions = {
         .from('conversions')
         .select('order_amount, sale_date, status')
         .eq('brand_id', brandId)
-        .eq('order_is_real', true);
+        .eq('order_is_real', true)
+        .in('status', ['authorized', 'paid']); // Only count authorized and paid orders
 
       if (filters.startDate) {
         const startDateStr = formatDateForQuery(filters.startDate, false);
@@ -1077,15 +1078,13 @@ export const dataFunctions = {
       // Group by date and sum revenue, count orders
       const dailyData = {};
       (data || []).forEach(conv => {
-        if (conv.status === 'paid' || conv.status === 'confirmed' || conv.status === 'completed') {
-          const dateString = conv.sale_date.split('T')[0];
-          const [year, month, day] = dateString.split('-');
-          const displayDate = `${day}/${month}/${year}`;
-          
-          dailyData[dateString] = dailyData[dateString] || { display: displayDate, revenue: 0, count: 0 };
-          dailyData[dateString].revenue += parseFloat(conv.order_amount || 0);
-          dailyData[dateString].count += 1;
-        }
+        const dateString = conv.sale_date.split('T')[0];
+        const [year, month, day] = dateString.split('-');
+        const displayDate = `${day}/${month}/${year}`;
+        
+        dailyData[dateString] = dailyData[dateString] || { display: displayDate, revenue: 0, count: 0 };
+        dailyData[dateString].revenue += parseFloat(conv.order_amount || 0);
+        dailyData[dateString].count += 1;
       });
 
       // Sort by date ascending and format
@@ -1112,7 +1111,8 @@ export const dataFunctions = {
         .from('conversions')
         .select('order_amount, status, coupon_id, coupons(classification)')
         .eq('brand_id', brandId)
-        .eq('order_is_real', true);
+        .eq('order_is_real', true)
+        .in('status', ['authorized', 'paid']); // Only count authorized and paid orders
 
       if (filters.startDate) {
         const startDateStr = formatDateForQuery(filters.startDate, false);
@@ -1144,27 +1144,25 @@ export const dataFunctions = {
       // Group by classification and sum revenue
       const classData = {};
       (conversions || []).forEach(conv => {
-        if (conv.status === 'paid' || conv.status === 'confirmed' || conv.status === 'completed') {
-          const classId = conv.coupons?.classification;
+        const classId = conv.coupons?.classification;
+        
+        if (classId && classMap[classId]) {
+          const className = classMap[classId].name;
+          const classColor = classMap[classId].color;
+          const key = `${classId}`;
           
-          if (classId && classMap[classId]) {
-            const className = classMap[classId].name;
-            const classColor = classMap[classId].color;
-            const key = `${classId}`;
-            
-            if (!classData[key]) {
-              classData[key] = { name: className, color: classColor, revenue: 0 };
-            }
-            classData[key].revenue += parseFloat(conv.order_amount || 0);
-          } else {
-            // Handle uncategorized coupons
+          if (!classData[key]) {
+            classData[key] = { name: className, color: classColor, revenue: 0 };
+          }
+          classData[key].revenue += parseFloat(conv.order_amount || 0);
+        } else {
+          // Handle uncategorized coupons
             const key = 'uncategorized';
             if (!classData[key]) {
               classData[key] = { name: 'Sem classificação', color: '#6366f1', revenue: 0 };
             }
             classData[key].revenue += parseFloat(conv.order_amount || 0);
           }
-        }
       });
 
       // Sort by revenue descending and take top 5
@@ -1190,7 +1188,8 @@ export const dataFunctions = {
         .from('conversions')
         .select('order_amount, status, coupons(code)')
         .eq('brand_id', brandId)
-        .eq('order_is_real', true);
+        .eq('order_is_real', true)
+        .in('status', ['authorized', 'paid']); // Only count authorized and paid orders
 
       if (filters.startDate) {
         const startDateStr = formatDateForQuery(filters.startDate, false);
@@ -1207,12 +1206,10 @@ export const dataFunctions = {
       // Group by coupon code and sum revenue
       const couponData = {};
       (data || []).forEach(conv => {
-        if (conv.status === 'paid' || conv.status === 'confirmed' || conv.status === 'completed') {
-          const code = conv.coupons?.code;
-          // Skip orders without coupons
-          if (code && code !== 'N/A') {
-            couponData[code] = (couponData[code] || 0) + parseFloat(conv.order_amount || 0);
-          }
+        const code = conv.coupons?.code;
+        // Skip orders without coupons
+        if (code && code !== 'N/A') {
+          couponData[code] = (couponData[code] || 0) + parseFloat(conv.order_amount || 0);
         }
       });
 
