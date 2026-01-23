@@ -269,60 +269,9 @@ export const dataFunctions = {
 
       // Filter out test orders by default
       if (!includeTestOrders) {
-        try {
-          const startDateStr = filters.startDate ? formatDateForQuery(filters.startDate, false) : '1970-01-01';
-          const endDateStr = filters.endDate ? formatDateForQuery(filters.endDate, true) : formatDateForQuery(new Date(), true);
+        query = query.eq('order_is_real', true);
+      }
 
-          const { data, error } = await supabase.rpc('get_pending_orders', {
-            p_brand_id: brandId,
-            p_start_date: startDateStr,
-            p_end_date: endDateStr,
-          });
-          if (error) throw error;
-
-          // Rows: { sale_date, valor, quant_pedidos }
-          let totalValue = 0;
-          let totalOrders = 0;
-
-          const chart = (data || []).map(r => {
-            const [y, m, d] = (r.sale_date || '').toString().split('-');
-            const displayDate = `${d}/${m}/${y}`;
-            const value = parseFloat((r.valor || 0).toString());
-            const orders = parseInt(r.quant_pedidos || 0, 10);
-            totalValue += value;
-            totalOrders += orders;
-            return { date: displayDate, value, orders };
-          }).sort((a, b) => {
-            const toKey = s => s.date.split('/').reverse().join('');
-            return toKey(a) < toKey(b) ? -1 : toKey(a) > toKey(b) ? 1 : 0;
-          });
-
-          return { data: { totalValue: parseFloat(totalValue.toFixed(2)), totalOrders, chart }, error: null };
-        } catch (err) {
-          console.error('Error in getPendingOrders (RPC):', err);
-          return { data: { totalValue: 0, totalOrders: 0, chart: [] }, error: err.message || String(err) };
-        }
-      const { 
-        orderId,
-        couponCode,
-        status,
-        startDate,
-        endDate,
-        includeTestOrders = false
-      } = filters;
-
-      let query = supabase
-        .from('conversions')
-        .select(`
-          order_amount,
-          commission_amount,
-          order_id,
-          order_number,
-          status,
-          coupon_id,
-          coupons(code)
-        `)
-        .eq('brand_id', brandId);
 
       // Filter out test orders by default
       if (!includeTestOrders) {
