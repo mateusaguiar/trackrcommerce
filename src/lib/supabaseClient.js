@@ -1056,61 +1056,61 @@ export const dataFunctions = {
   // Get daily revenue for chart
   getDailyRevenue: async (brandId, filters = {}) => {
     try {
-      // 1. Fetch columns including order_id to perform COUNT(DISTINCT) logic
       let query = supabase
         .from('conversions')
-        .select('order_id, order_amount, sale_date, status')
+        .select('order_amount, sale_date, status, order_id')
         .eq('brand_id', brandId)
         .eq('order_is_real', true)
-        .in('status', ['authorized', 'paid']); // Matches status in ('paid','authorized')
+        .in('status', ['authorized', 'paid']); // Only count authorized and paid orders
 
       if (filters.startDate) {
-        query = query.gte('sale_date', filters.startDate);
+        const startDateStr = formatDateForQuery(filters.startDate, false);
+        query = query.gte('sale_date', startDateStr);
       }
       if (filters.endDate) {
-        query = query.lt('sale_date', filters.endDate);
+        const endDateStr = formatDateForQuery(filters.endDate, true);
+        query = query.lt('sale_date', endDateStr);
       }
 
       const { data, error } = await query;
       if (error) throw error;
 
-      // 2. Group by date converted to America/Sao_Paulo
+      // Group by date and sum revenue, count DISTINCT order_ids
+      // Convert to São Paulo timezone for date grouping
       const dailyData = {};
-      const uniqueOrdersPerDay = {}; 
-
+      const processedOrders = {}; // Track unique orders per date
+      
       (data || []).forEach(conv => {
-        // Translation of: (sale_date AT TIME ZONE 'America/Sao_Paulo')::date
-        // We use 'en-CA' because it returns YYYY-MM-DD
-        const localDateKey = new Date(conv.sale_date).toLocaleDateString('en-CA', { 
-          timeZone: 'America/Sao_Paulo' 
-        }); 
-        
-        const [year, month, day] = localDateKey.split('-');
+        // Convert UTC timestamp to São Paulo timezone date
+        const utcDate = new Date(conv.sale_date);
+        // Subtract 3 hours to convert from UTC to GMT-03 (São Paulo)
+        const saoPauloDate = new Date(utcDate.getTime() - (3 * 60 * 60 * 1000));
+        const dateString = saoPauloDate.toISOString().split('T')[0];
+        const [year, month, day] = dateString.split('-');
         const displayDate = `${day}/${month}/${year}`;
         
-        // Initialize daily bucket
-        dailyData[localDateKey] = dailyData[localDateKey] || { 
-          display: displayDate, 
-          revenue: 0 
-        };
-        uniqueOrdersPerDay[localDateKey] = uniqueOrdersPerDay[localDateKey] || new Set();
-
-        // sum(order_amount)
-        dailyData[localDateKey].revenue += parseFloat(conv.order_amount || 0);
+        if (!dailyData[dateString]) {
+          dailyData[dateString] = { display: displayDate, revenue: 0, count: 0 };
+          processedOrders[dateString] = new Set();
+        }
         
-        // COUNT(DISTINCT order_id)
-        if (conv.order_id) {
-          uniqueOrdersPerDay[localDateKey].add(conv.order_id);
+        // Sum all order amounts (multiple conversion records may exist for same order)
+        dailyData[dateString].revenue += parseFloat(conv.order_amount || 0);
+        
+        // Count distinct order_ids only
+        if (conv.order_id && !processedOrders[dateString].has(conv.order_id)) {
+          processedOrders[dateString].add(conv.order_id);
+          dailyData[dateString].count += 1;
         }
       });
 
-      // 3. Sort by date ascending and format output
+      // Sort by date ascending and format
       const sorted = Object.keys(dailyData)
         .sort()
         .map(dateKey => ({
           date: dailyData[dateKey].display,
           receita: parseFloat(dailyData[dateKey].revenue.toFixed(2)),
-          pedidos: uniqueOrdersPerDay[dateKey].size // Result of distinct count
+          pedidos: dailyData[dateKey].count
         }));
 
       return { data: sorted, error: null };
