@@ -826,10 +826,12 @@ export default function Dashboard() {
                               <td className="py-4 px-4 text-sm font-semibold text-zinc-300">
                                 TOTAL
                               </td>
+                              <td className="py-4 px-4 text-sm"></td>
+                              <td className="py-4 px-4 text-sm"></td>
+                              <td className="py-4 px-4 text-sm"></td>
                               <td className="py-4 px-4 text-sm font-semibold text-zinc-300">
                                 |
                               </td>
-                              <td className="py-4 px-4 text-sm"></td>
                               <td className="py-4 px-4 text-sm"></td>
                               <td className="py-4 px-4 text-sm font-semibold text-zinc-300">
                                 {couponSubtotals.totalUsage} Cupons Usados
@@ -845,7 +847,6 @@ export default function Dashboard() {
                                   minimumFractionDigits: 2,
                                 })}
                               </td>
-                              <td className="py-4 px-4 text-sm"></td>
                               <td className="py-4 px-4 text-sm"></td>
                               <td className="py-4 px-4 text-sm"></td>
                             </tr>
@@ -1232,9 +1233,12 @@ export default function Dashboard() {
                                 TOTAL
                               </td>
                               <td className="py-4 px-4 text-sm"></td>
+                              <td className="py-4 px-4 text-sm"></td>
+                              <td className="py-4 px-4 text-sm"></td>
                               <td className="py-4 px-4 text-sm font-semibold text-zinc-300">
                                 |
                               </td>
+                              <td className="py-4 px-4 text-sm"></td>
                               <td className="py-4 px-4 text-sm font-semibold text-zinc-300">
                                 Receita Gerada:
                               </td>
