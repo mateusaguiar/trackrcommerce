@@ -8,6 +8,19 @@ export const supabase = supabaseUrl && supabaseAnonKey
   ? createClient(supabaseUrl, supabaseAnonKey)
   : null;
 
+// Helper function to format dates for queries without timezone conversion
+const formatDateForQuery = (date, isEndDate = false) => {
+  if (!date) return null;
+  const d = new Date(date);
+  if (isEndDate) {
+    d.setDate(d.getDate() + 1);
+  }
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
 // ============================================
 // AUTHENTICATION FUNCTIONS
 // ============================================
@@ -1050,10 +1063,12 @@ export const dataFunctions = {
         .eq('order_is_real', true);
 
       if (filters.startDate) {
-        query = query.gte('sale_date', filters.startDate.toISOString());
+        const startDateStr = formatDateForQuery(filters.startDate, false);
+        query = query.gte('sale_date', startDateStr);
       }
       if (filters.endDate) {
-        query = query.lte('sale_date', filters.endDate.toISOString());
+        const endDateStr = formatDateForQuery(filters.endDate, true);
+        query = query.lt('sale_date', endDateStr);
       }
 
       const { data, error } = await query;
@@ -1100,10 +1115,12 @@ export const dataFunctions = {
         .eq('order_is_real', true);
 
       if (filters.startDate) {
-        convQuery = convQuery.gte('sale_date', filters.startDate.toISOString());
+        const startDateStr = formatDateForQuery(filters.startDate, false);
+        convQuery = convQuery.gte('sale_date', startDateStr);
       }
       if (filters.endDate) {
-        convQuery = convQuery.lte('sale_date', filters.endDate.toISOString());
+        const endDateStr = formatDateForQuery(filters.endDate, true);
+        convQuery = convQuery.lt('sale_date', endDateStr);
       }
 
       const { data: conversions, error: convError } = await convQuery;
@@ -1176,10 +1193,12 @@ export const dataFunctions = {
         .eq('order_is_real', true);
 
       if (filters.startDate) {
-        query = query.gte('sale_date', filters.startDate.toISOString());
+        const startDateStr = formatDateForQuery(filters.startDate, false);
+        query = query.gte('sale_date', startDateStr);
       }
       if (filters.endDate) {
-        query = query.lte('sale_date', filters.endDate.toISOString());
+        const endDateStr = formatDateForQuery(filters.endDate, true);
+        query = query.lt('sale_date', endDateStr);
       }
 
       const { data, error } = await query;
@@ -1224,10 +1243,12 @@ export const dataFunctions = {
         .eq('order_is_real', true);
 
       if (filters.startDate) {
-        query = query.gte('sale_date', filters.startDate.toISOString());
+        const startDateStr = formatDateForQuery(filters.startDate, false);
+        query = query.gte('sale_date', startDateStr);
       }
       if (filters.endDate) {
-        query = query.lte('sale_date', filters.endDate.toISOString());
+        const endDateStr = formatDateForQuery(filters.endDate, true);
+        query = query.lt('sale_date', endDateStr);
       }
 
       const { data, error } = await query;
