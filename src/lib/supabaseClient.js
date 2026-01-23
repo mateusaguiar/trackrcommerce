@@ -247,6 +247,9 @@ export const dataFunctions = {
         endDate,
         includeTestOrders = false
       } = filters;
+      // Build base query with pagination and exact count
+      const from = (page - 1) * limit;
+      const to = from + limit - 1;
 
       let query = supabase
         .from('conversions')
@@ -267,58 +270,92 @@ export const dataFunctions = {
         `, { count: 'exact' })
         .eq('brand_id', brandId);
 
-      // Filter out test orders by default
       if (!includeTestOrders) {
         query = query.eq('order_is_real', true);
       }
 
-
-      // Filter out test orders by default
-      if (!includeTestOrders) {
-        query = query.eq('order_is_real', true);
-      }
-
-      // Apply filters
       if (status) {
         query = query.eq('status', status);
       }
 
       if (startDate) {
-        query = query.gte('sale_date_br_tmz', startDate.toISOString());
+        const s = formatDateForQuery(startDate, false);
+        query = query.gte('sale_date_br_tmz', s);
       }
       if (endDate) {
-        query = query.lte('sale_date_br_tmz', endDate.toISOString());
+        const e = formatDateForQuery(endDate, true);
+        query = query.lt('sale_date_br_tmz', e);
       }
 
-      const { data, error } = await query;
+      // Sorting
+      const ascending = sortDirection === 'asc';
+      query = query.order(sortBy, { ascending });
 
+      // Range / pagination
+      const { data, error, count } = await query.range(from, to);
       if (error) throw error;
 
-      // Apply client-side filters and calculate totals
-      let filteredData = (data || []).map(c => ({
+      // Map coupon_code and apply client-side simple filters (orderId, couponCode)
+      let mapped = (data || []).map(c => ({
         ...c,
         coupon_code: c.coupons?.code || 'N/A'
       }));
 
       if (orderId) {
-        filteredData = filteredData.filter(c => 
-          (c.order_number || c.order_id) === orderId
-        );
+        mapped = mapped.filter(c => (c.order_number || c.order_id) === orderId);
       }
       if (couponCode) {
-        filteredData = filteredData.filter(c => c.coupon_code === couponCode);
+        mapped = mapped.filter(c => c.coupon_code === couponCode);
       }
 
-      const totalRevenue = filteredData.reduce((sum, c) => sum + parseFloat(c.order_amount || 0), 0);
-      const totalCommission = filteredData.reduce((sum, c) => sum + parseFloat(c.commission_amount || 0), 0);
-
-      return { 
-        totalRevenue,
-        totalCommission,
-        error: null 
+      return {
+        conversions: mapped,
+        totalCount: count || 0,
+        error: null,
       };
     } catch (error) {
-      return { totalRevenue: 0, totalCommission: 0, error: error.message };
+      return { conversions: [], totalCount: 0, error: error.message };
+    }
+  },
+
+  // Get totals for conversions (used for subtotals row)
+  getBrandConversionTotals: async (brandId, filters = {}) => {
+    if (!supabase) throw new Error('Supabase not configured');
+
+    try {
+      const {
+        orderId,
+        couponCode,
+        status,
+        startDate,
+        endDate,
+        includeTestOrders = false,
+      } = filters;
+
+      let query = supabase
+        .from('conversions')
+        .select('order_amount, commission_amount, coupon_id, order_number, order_id, status, sale_date_br_tmz, order_is_real, coupons(code)');
+
+      query = query.eq('brand_id', brandId);
+      if (!includeTestOrders) query = query.eq('order_is_real', true);
+
+      if (status) query = query.eq('status', status);
+      if (startDate) query = query.gte('sale_date_br_tmz', formatDateForQuery(startDate, false));
+      if (endDate) query = query.lt('sale_date_br_tmz', formatDateForQuery(endDate, true));
+
+      const { data, error } = await query;
+      if (error) throw error;
+
+      let filtered = (data || []).map(c => ({ ...c, coupon_code: c.coupons?.code || 'N/A' }));
+      if (orderId) filtered = filtered.filter(c => (c.order_number || c.order_id) === orderId);
+      if (couponCode) filtered = filtered.filter(c => c.coupon_code === couponCode);
+
+      const totalRevenue = filtered.reduce((sum, c) => sum + parseFloat(c.order_amount || 0), 0);
+      const totalCommission = filtered.reduce((sum, c) => sum + parseFloat(c.commission_amount || 0), 0);
+
+      return { totalRevenue, totalCommission, error: null };
+    } catch (err) {
+      return { totalRevenue: 0, totalCommission: 0, error: err.message };
     }
   },
 
