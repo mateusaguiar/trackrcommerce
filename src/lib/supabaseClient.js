@@ -1056,44 +1056,61 @@ export const dataFunctions = {
   // Get daily revenue for chart
   getDailyRevenue: async (brandId, filters = {}) => {
     try {
+      // 1. Fetch columns including order_id to perform COUNT(DISTINCT) logic
       let query = supabase
         .from('conversions')
-        .select('order_amount, sale_date, status')
+        .select('order_id, order_amount, sale_date, status')
         .eq('brand_id', brandId)
         .eq('order_is_real', true)
-        .in('status', ['authorized', 'paid']); // Only count authorized and paid orders
+        .in('status', ['authorized', 'paid']); // Matches status in ('paid','authorized')
 
       if (filters.startDate) {
-        const startDateStr = formatDateForQuery(filters.startDate, false);
-        query = query.gte('sale_date', startDateStr);
+        query = query.gte('sale_date', filters.startDate);
       }
       if (filters.endDate) {
-        const endDateStr = formatDateForQuery(filters.endDate, true);
-        query = query.lt('sale_date', endDateStr);
+        query = query.lt('sale_date', filters.endDate);
       }
 
       const { data, error } = await query;
       if (error) throw error;
 
-      // Group by date and sum revenue, count orders
+      // 2. Group by date converted to America/Sao_Paulo
       const dailyData = {};
+      const uniqueOrdersPerDay = {}; 
+
       (data || []).forEach(conv => {
-        const dateString = conv.sale_date.split('T')[0];
-        const [year, month, day] = dateString.split('-');
+        // Translation of: (sale_date AT TIME ZONE 'America/Sao_Paulo')::date
+        // We use 'en-CA' because it returns YYYY-MM-DD
+        const localDateKey = new Date(conv.sale_date).toLocaleDateString('en-CA', { 
+          timeZone: 'America/Sao_Paulo' 
+        }); 
+        
+        const [year, month, day] = localDateKey.split('-');
         const displayDate = `${day}/${month}/${year}`;
         
-        dailyData[dateString] = dailyData[dateString] || { display: displayDate, revenue: 0, count: 0 };
-        dailyData[dateString].revenue += parseFloat(conv.order_amount || 0);
-        dailyData[dateString].count += 1;
+        // Initialize daily bucket
+        dailyData[localDateKey] = dailyData[localDateKey] || { 
+          display: displayDate, 
+          revenue: 0 
+        };
+        uniqueOrdersPerDay[localDateKey] = uniqueOrdersPerDay[localDateKey] || new Set();
+
+        // sum(order_amount)
+        dailyData[localDateKey].revenue += parseFloat(conv.order_amount || 0);
+        
+        // COUNT(DISTINCT order_id)
+        if (conv.order_id) {
+          uniqueOrdersPerDay[localDateKey].add(conv.order_id);
+        }
       });
 
-      // Sort by date ascending and format
+      // 3. Sort by date ascending and format output
       const sorted = Object.keys(dailyData)
         .sort()
         .map(dateKey => ({
           date: dailyData[dateKey].display,
           receita: parseFloat(dailyData[dateKey].revenue.toFixed(2)),
-          pedidos: dailyData[dateKey].count
+          pedidos: uniqueOrdersPerDay[dateKey].size // Result of distinct count
         }));
 
       return { data: sorted, error: null };
