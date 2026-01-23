@@ -269,67 +269,39 @@ export const dataFunctions = {
 
       // Filter out test orders by default
       if (!includeTestOrders) {
-        query = query.eq('order_is_real', true);
-      }
+        try {
+          const startDateStr = filters.startDate ? formatDateForQuery(filters.startDate, false) : '1970-01-01';
+          const endDateStr = filters.endDate ? formatDateForQuery(filters.endDate, true) : formatDateForQuery(new Date(), true);
 
-      // Apply filters
-      if (status) {
-        query = query.eq('status', status);
-      }
+          const { data, error } = await supabase.rpc('get_pending_orders', {
+            p_brand_id: brandId,
+            p_start_date: startDateStr,
+            p_end_date: endDateStr,
+          });
+          if (error) throw error;
 
-      if (startDate) {
-        query = query.gte('sale_date_br_tmz', startDate.toISOString());
-      }
-      if (endDate) {
-        query = query.lte('sale_date_br_tmz', endDate.toISOString());
-      }
+          // Rows: { sale_date, valor, quant_pedidos }
+          let totalValue = 0;
+          let totalOrders = 0;
 
-      // Client-side filters (after fetching) for order_id and coupon_code
-      // We'll apply these after getting the data since they involve joined tables
+          const chart = (data || []).map(r => {
+            const [y, m, d] = (r.sale_date || '').toString().split('-');
+            const displayDate = `${d}/${m}/${y}`;
+            const value = parseFloat((r.valor || 0).toString());
+            const orders = parseInt(r.quant_pedidos || 0, 10);
+            totalValue += value;
+            totalOrders += orders;
+            return { date: displayDate, value, orders };
+          }).sort((a, b) => {
+            const toKey = s => s.date.split('/').reverse().join('');
+            return toKey(a) < toKey(b) ? -1 : toKey(a) > toKey(b) ? 1 : 0;
+          });
 
-      // Apply sorting
-      const ascending = sortDirection === 'asc';
-      query = query.order(sortBy, { ascending });
-
-      // Apply pagination
-      const from = (page - 1) * limit;
-      const to = from + limit - 1;
-      
-      const { data, error, count } = await query.range(from, to);
-
-      if (error) throw error;
-
-      // Transform data to flatten coupon code
-      let transformedData = (data || []).map(conversion => ({
-        ...conversion,
-        coupon_code: conversion.coupons?.code || 'N/A',
-      }));
-
-      // Apply client-side filters for orderId and couponCode
-      if (orderId) {
-        transformedData = transformedData.filter(c => 
-          (c.order_number || c.order_id) === orderId
-        );
-      }
-      if (couponCode) {
-        transformedData = transformedData.filter(c => c.coupon_code === couponCode);
-      }
-
-      return { 
-        conversions: transformedData, 
-        totalCount: count || 0,
-        error: null 
-      };
-    } catch (error) {
-      return { conversions: [], totalCount: 0, error: error.message };
-    }
-  },
-
-  // Get conversion totals for subtotals row
-  getBrandConversionTotals: async (brandId, filters = {}) => {
-    if (!supabase) throw new Error('Supabase not configured');
-    
-    try {
+          return { data: { totalValue: parseFloat(totalValue.toFixed(2)), totalOrders, chart }, error: null };
+        } catch (err) {
+          console.error('Error in getPendingOrders (RPC):', err);
+          return { data: { totalValue: 0, totalOrders: 0, chart: [] }, error: err.message || String(err) };
+        }
       const { 
         orderId,
         couponCode,
@@ -1056,62 +1028,37 @@ export const dataFunctions = {
   // Get daily revenue for chart
   getDailyRevenue: async (brandId, filters = {}) => {
     try {
-      let query = supabase
-        .from('conversions')
-        .select('order_amount, sale_date_br_tmz, status, order_id')
-        .eq('brand_id', brandId)
-        .eq('order_is_real', true)
-        .in('status', ['authorized', 'paid']); // Only count authorized and paid orders
+      // Prepare date range parameters (use wide defaults if not provided)
+      const startDateStr = filters.startDate ? formatDateForQuery(filters.startDate, false) : '1970-01-01';
+      const endDateStr = filters.endDate ? formatDateForQuery(filters.endDate, true) : formatDateForQuery(new Date(), true);
 
-      if (filters.startDate) {
-        const startDateStr = formatDateForQuery(filters.startDate, false);
-        query = query.gte('sale_date_br_tmz', startDateStr);
-      }
-      if (filters.endDate) {
-        const endDateStr = formatDateForQuery(filters.endDate, true);
-        query = query.lt('sale_date_br_tmz', endDateStr);
-      }
-
-      const { data, error } = await query;
+      // Call Postgres RPC to aggregate on the server (no row-limit issues)
+      const { data, error } = await supabase.rpc('get_daily_revenue', {
+        p_brand_id: brandId,
+        p_start_date: startDateStr,
+        p_end_date: endDateStr,
+      });
       if (error) throw error;
 
-      // Group by date and sum revenue, count DISTINCT order_ids
-      const dailyData = {};
-      const processedOrders = {}; // Track unique orders per date
-      
-      (data || []).forEach(conv => {
-        // Extract date from sale_date_br_tmz (already in GMT-03)
-        const dateString = conv.sale_date_br_tmz.split('T')[0];
-        const [year, month, day] = dateString.split('-');
-        const displayDate = `${day}/${month}/${year}`;
-        
-        if (!dailyData[dateString]) {
-          dailyData[dateString] = { display: displayDate, revenue: 0, count: 0 };
-          processedOrders[dateString] = new Set();
-        }
-        
-        // Sum all order amounts (multiple conversion records may exist for same order)
-        dailyData[dateString].revenue += parseFloat(conv.order_amount || 0);
-        
-        // Count distinct order_ids only
-        if (conv.order_id && !processedOrders[dateString].has(conv.order_id)) {
-          processedOrders[dateString].add(conv.order_id);
-          dailyData[dateString].count += 1;
-        }
-      });
-
-      // Sort by date ascending and format
-      const sorted = Object.keys(dailyData)
-        .sort()
-        .map(dateKey => ({
-          date: dailyData[dateKey].display,
-          receita: parseFloat(dailyData[dateKey].revenue.toFixed(2)),
-          pedidos: dailyData[dateKey].count
-        }));
+      // Data rows: { sale_date: 'YYYY-MM-DD', valor, quant_pedidos }
+      const sorted = (data || [])
+        .map(r => ({
+          date: (() => {
+            const [y, m, d] = (r.sale_date || '').toString().split('-');
+            return `${d}/${m}/${y}`;
+          })(),
+          receita: parseFloat((r.valor || 0).toString()),
+          pedidos: parseInt(r.quant_pedidos || 0, 10)
+        }))
+        .sort((a, b) => {
+          // sort by date ascending (DD/MM/YYYY -> compare YYYYMMDD)
+          const toKey = s => s.date.split('/').reverse().join('');
+          return toKey(a) < toKey(b) ? -1 : toKey(a) > toKey(b) ? 1 : 0;
+        });
 
       return { data: sorted, error: null };
     } catch (err) {
-      console.error('Error in getDailyRevenue:', err);
+      console.error('Error in getDailyRevenue (RPC):', err);
       return { data: [], error: err.message || String(err) };
     }
   },
