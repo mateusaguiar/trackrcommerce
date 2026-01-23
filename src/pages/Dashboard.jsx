@@ -826,10 +826,16 @@ export default function Dashboard() {
                               <td className="py-4 px-4 text-sm font-semibold text-zinc-300">
                                 TOTAL
                               </td>
+                              <td className="py-4 px-4 text-sm font-semibold text-zinc-300">
+                                |
+                              </td>
                               <td className="py-4 px-4 text-sm"></td>
                               <td className="py-4 px-4 text-sm"></td>
                               <td className="py-4 px-4 text-sm font-semibold text-zinc-300">
                                 {couponSubtotals.totalUsage} Cupons Usados
+                              </td>
+                              <td className="py-4 px-4 text-sm font-semibold text-zinc-300">
+                                |
                               </td>
                               <td className="py-4 px-4 text-sm font-semibold text-zinc-300">
                                 Receita Gerada: 
@@ -1236,6 +1242,9 @@ export default function Dashboard() {
                                  R$ {conversionSubtotals.totalRevenue.toLocaleString('pt-BR', {
                                   minimumFractionDigits: 2,
                                 })}
+                              </td>
+                              <td className="py-4 px-4 text-sm font-semibold text-zinc-300">
+                                |
                               </td>
                               <td className="py-4 px-4 text-sm font-semibold text-zinc-300">
                                 Comissão:
