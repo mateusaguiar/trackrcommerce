@@ -831,8 +831,11 @@ export default function Dashboard() {
                               <td className="py-4 px-4 text-sm font-semibold text-zinc-300">
                                 {couponSubtotals.totalUsage} Cupons Usados
                               </td>
+                              <td className="py-4 px-4 text-sm font-semibold text-zinc-300">
+                                Receita Gerada: 
+                              </td>
                               <td className="py-4 px-4 text-sm font-semibold text-emerald-400">
-                                Valor Total: R$ {couponSubtotals.totalSales.toLocaleString('pt-BR', {
+                                R$ {couponSubtotals.totalSales.toLocaleString('pt-BR', {
                                   minimumFractionDigits: 2,
                                 })}
                               </td>
@@ -1223,13 +1226,22 @@ export default function Dashboard() {
                                 TOTAL
                               </td>
                               <td className="py-4 px-4 text-sm"></td>
+                              <td className="py-4 px-4 text-sm font-semibold text-zinc-300">
+                                |
+                              </td>
+                              <td className="py-4 px-4 text-sm font-semibold text-zinc-300">
+                                Receita Gerada:
+                              </td>
                               <td className="py-4 px-4 text-sm font-semibold text-emerald-400">
-                                Receita Gerada: R$ {conversionSubtotals.totalRevenue.toLocaleString('pt-BR', {
+                                 R$ {conversionSubtotals.totalRevenue.toLocaleString('pt-BR', {
                                   minimumFractionDigits: 2,
                                 })}
                               </td>
+                              <td className="py-4 px-4 text-sm font-semibold text-zinc-300">
+                                Comissão:
+                              </td>
                               <td className="py-4 px-4 text-sm font-semibold text-emerald-400">
-                                Comissão: R$ {conversionSubtotals.totalCommission.toLocaleString('pt-BR', {
+                                R$ {conversionSubtotals.totalCommission.toLocaleString('pt-BR', {
                                   minimumFractionDigits: 2,
                                 })}
                               </td>
