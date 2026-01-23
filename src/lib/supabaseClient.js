@@ -336,26 +336,41 @@ export const dataFunctions = {
 
       // If there are no specific order/coupon filters, use RPC to get full revenue/orders
       if (!orderId && !couponCode) {
-        // Use RPC for revenue and order counts (server-side aggregation)
-        const { data: rpcData, error: rpcErr } = await supabase.rpc('get_daily_revenue', {
-          p_brand_id: brandId,
-          p_start_date: s,
-          p_end_date: e,
-        });
-        if (rpcErr) throw rpcErr;
+        // Prefer RPC for revenue/orders when available
+        try {
+          const { data: rpcData, error: rpcErr } = await supabase.rpc('get_daily_revenue', {
+            p_brand_id: brandId,
+            p_start_date: s,
+            p_end_date: e,
+          });
+          if (!rpcErr && rpcData) {
+            const totalRevenue = (rpcData || []).reduce((sum, r) => sum + parseFloat(r.valor || 0), 0);
 
-        const totalRevenue = (rpcData || []).reduce((sum, r) => sum + parseFloat(r.valor || 0), 0);
+            // Sum commissions server-side to avoid row truncation
+            const { data: comData, error: comErr } = await supabase
+              .from('conversions')
+              .select('sum_commission:sum(commission_amount)')
+              .eq('brand_id', brandId)
+              .eq('order_is_real', !includeTestOrders ? true : undefined)
+              .gte('sale_date_br_tmz', s)
+              .lt('sale_date_br_tmz', e);
+            if (comErr) throw comErr;
+            const totalCommission = parseFloat((comData && comData[0] && (comData[0].sum_commission || 0)) || 0);
 
-        // Sum commissions server-side to avoid row truncation
-        const { data: comData, error: comErr } = await supabase
+            return { totalRevenue, totalCommission, error: null };
+          }
+        } catch (rpcEx) {
+          // RPC not available or failed — fall back to server-side aggregates
+          console.warn('get_daily_revenue RPC failed, falling back to aggregates:', rpcEx?.message || rpcEx);
+        }
+
+        // Fallback: aggregate directly from conversions table (server-side)
+        const { data: aggFallback, error: aggFallbackErr } = await supabase
           .from('conversions')
-          .select('sum(commission_amount)')
-          .eq('brand_id', brandId)
-          .eq('order_is_real', !includeTestOrders ? true : undefined)
-          .gte('sale_date_br_tmz', s)
-          .lt('sale_date_br_tmz', e);
-        if (comErr) throw comErr;
-        const totalCommission = parseFloat((comData && comData[0] && (comData[0].sum || 0)) || 0);
+          .select('sum_val:sum(order_amount), sum_commission:sum(commission_amount)', { head: false });
+        if (aggFallbackErr) throw aggFallbackErr;
+        const totalRevenue = parseFloat((aggFallback && aggFallback[0] && (aggFallback[0].sum_val || 0)) || 0);
+        const totalCommission = parseFloat((aggFallback && aggFallback[0] && (aggFallback[0].sum_commission || 0)) || 0);
 
         return { totalRevenue, totalCommission, error: null };
       }
@@ -378,7 +393,7 @@ export const dataFunctions = {
       }
 
       // Build base filter for aggregated queries
-      let base = supabase.from('conversions').select('sum(order_amount), sum(commission_amount)', { count: 'exact' });
+      let base = supabase.from('conversions').select('sum_val:sum(order_amount), sum_commission:sum(commission_amount)', { count: 'exact' });
       base = base.eq('brand_id', brandId).eq('order_is_real', !includeTestOrders ? true : undefined).gte('sale_date_br_tmz', s).lt('sale_date_br_tmz', e);
       if (status) base = base.eq('status', status);
       if (couponId) base = base.eq('coupon_id', couponId);
@@ -387,8 +402,8 @@ export const dataFunctions = {
       const { data: aggData, error: aggErr } = await base;
       if (aggErr) throw aggErr;
 
-      const totalRevenue = parseFloat((aggData && aggData[0] && (aggData[0].sum || 0)) || 0);
-      const totalCommission = parseFloat((aggData && aggData[0] && (aggData[0].sum_1 || aggData[0].sum || 0)) || 0);
+      const totalRevenue = parseFloat((aggData && aggData[0] && (aggData[0].sum_val || 0)) || 0);
+      const totalCommission = parseFloat((aggData && aggData[0] && (aggData[0].sum_commission || 0)) || 0);
 
       return { totalRevenue, totalCommission, error: null };
     } catch (err) {
@@ -857,7 +872,7 @@ export const dataFunctions = {
       // Sum order_amount server-side for these coupons
       const { data: sumData, error: sumErr } = await supabase
         .from('conversions')
-        .select('sum(order_amount)')
+        .select('sum_val:sum(order_amount)')
         .in('coupon_id', couponIds)
         .eq('order_is_real', true)
         .in('status', ['paid', 'confirmed', 'completed'])
@@ -867,7 +882,7 @@ export const dataFunctions = {
       if (sumErr) throw sumErr;
 
       const totalUsage = usageCount || 0;
-      const totalSales = parseFloat((sumData && sumData[0] && (sumData[0].sum || 0)) || 0);
+      const totalSales = parseFloat((sumData && sumData[0] && (sumData[0].sum_val || 0)) || 0);
 
       return {
         totalUsage,
