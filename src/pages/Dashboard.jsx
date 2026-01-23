@@ -829,10 +829,10 @@ export default function Dashboard() {
                               <td className="py-4 px-4 text-sm"></td>
                               <td className="py-4 px-4 text-sm"></td>
                               <td className="py-4 px-4 text-sm font-semibold text-zinc-300">
-                                {couponSubtotals.totalUsage}
+                                {couponSubtotals.totalUsage} Cupons Usados
                               </td>
                               <td className="py-4 px-4 text-sm font-semibold text-emerald-400">
-                                R$ {couponSubtotals.totalSales.toLocaleString('pt-BR', {
+                                Valor Total: R$ {couponSubtotals.totalSales.toLocaleString('pt-BR', {
                                   minimumFractionDigits: 2,
                                 })}
                               </td>
@@ -1224,12 +1224,12 @@ export default function Dashboard() {
                               </td>
                               <td className="py-4 px-4 text-sm"></td>
                               <td className="py-4 px-4 text-sm font-semibold text-emerald-400">
-                                R$ {conversionSubtotals.totalRevenue.toLocaleString('pt-BR', {
+                                Receita Gerada: R$ {conversionSubtotals.totalRevenue.toLocaleString('pt-BR', {
                                   minimumFractionDigits: 2,
                                 })}
                               </td>
                               <td className="py-4 px-4 text-sm font-semibold text-emerald-400">
-                                R$ {conversionSubtotals.totalCommission.toLocaleString('pt-BR', {
+                                Comissão: R$ {conversionSubtotals.totalCommission.toLocaleString('pt-BR', {
                                   minimumFractionDigits: 2,
                                 })}
                               </td>
