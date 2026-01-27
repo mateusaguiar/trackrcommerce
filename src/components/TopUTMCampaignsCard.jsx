@@ -56,7 +56,7 @@ export function TopUTMCampaignsCard({ data, loading, error }) {
         <BarChart 
           data={data}
           layout="vertical"
-          margin={{ top: 5, right: 30, left: 110, bottom: 5 }}
+          margin={{ top: 5, right: 30, left: 160, bottom: 5 }}
         >
           <CartesianGrid strokeDasharray="3 3" stroke="#27272a" />
           <XAxis type="number" stroke="#a1a1aa" style={{ fontSize: '12px' }} />

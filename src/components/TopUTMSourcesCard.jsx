@@ -56,7 +56,7 @@ export function TopUTMSourcesCard({ data, loading, error }) {
         <BarChart 
           data={data}
           layout="vertical"
-          margin={{ top: 5, right: 30, left: 70, bottom: 5 }}
+          margin={{ top: 5, right: 30, left: 50, bottom: 5 }}
         >
           <CartesianGrid strokeDasharray="3 3" stroke="#27272a" />
           <XAxis type="number" stroke="#a1a1aa" style={{ fontSize: '12px' }} />
@@ -75,7 +75,7 @@ export function TopUTMSourcesCard({ data, loading, error }) {
             }}
             formatter={(value) => `R$ ${value.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`}
           />
-          <Bar dataKey="revenue" fill="#10b981" radius={[0, 8, 8, 0]} />
+          <Bar dataKey="revenue" fill="#426bb2" radius={[0, 8, 8, 0]} />
         </BarChart>
       </ResponsiveContainer>
     </div>
