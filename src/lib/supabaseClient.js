@@ -1163,73 +1163,73 @@ export const dataFunctions = {
   // Get top 5 coupon classifications by revenue
   getTopClassifications: async (brandId, filters = {}) => {
     try {
-      // First, get conversions with coupon classification IDs
+      const startDateStr = filters.startDate ? formatDateForQuery(filters.startDate, false) : '1970-01-01';
+      const endDateStr = filters.endDate ? formatDateForQuery(filters.endDate, true) : formatDateForQuery(new Date(), true);
+      const limit = filters.limit || 5;
+
+      // Prefer RPC for server-side aggregation
+      try {
+        const { data, error } = await supabase.rpc('get_top_classifications', {
+          p_brand_id: brandId,
+          p_start_date: startDateStr,
+          p_end_date: endDateStr,
+          p_limit: limit,
+        });
+        if (!error && data) {
+          const mapped = (data || []).map(r => ({
+            name: r.name || 'Sem classificação',
+            color: r.color || '#6366f1',
+            revenue: parseFloat((r.revenue || 0).toString()),
+          }));
+          return { data: mapped, error: null };
+        }
+      } catch (rpcErr) {
+        console.warn('get_top_classifications RPC failed, falling back to client aggregation:', rpcErr?.message || rpcErr);
+      }
+
+      // Fallback: previous client-side aggregation (may be truncated by PostgREST limits)
       let convQuery = supabase
         .from('conversions')
         .select('order_amount, sale_date_br_tmz, status, coupon_id, coupons(classification)')
         .eq('brand_id', brandId)
         .eq('order_is_real', true)
-        .in('status', ['authorized', 'paid']); // Only count authorized and paid orders
+        .in('status', ['authorized', 'paid']);
 
-      if (filters.startDate) {
-        const startDateStr = formatDateForQuery(filters.startDate, false);
-        convQuery = convQuery.gte('sale_date_br_tmz', startDateStr);
-      }
-      if (filters.endDate) {
-        const endDateStr = formatDateForQuery(filters.endDate, true);
-        convQuery = convQuery.lt('sale_date_br_tmz', endDateStr);
-      }
+      if (filters.startDate) convQuery = convQuery.gte('sale_date_br_tmz', startDateStr);
+      if (filters.endDate) convQuery = convQuery.lt('sale_date_br_tmz', endDateStr);
 
       const { data: conversions, error: convError } = await convQuery;
       if (convError) throw convError;
 
-      // Get all classifications for this brand
+      // Fetch classifications for mapping
       const { data: classifications, error: classError } = await supabase
         .from('coupon_classifications')
         .select('id, name, color')
         .eq('brand_id', brandId)
         .eq('is_active', true);
-
       if (classError) throw classError;
 
-      // Create a map for quick lookup
       const classMap = {};
-      (classifications || []).forEach(c => {
-        classMap[c.id] = { name: c.name, color: c.color };
-      });
+      (classifications || []).forEach(c => { classMap[c.id] = { name: c.name, color: c.color }; });
 
-      // Group by classification and sum revenue
       const classData = {};
       (conversions || []).forEach(conv => {
         const classId = conv.coupons?.classification;
-        
         if (classId && classMap[classId]) {
-          const className = classMap[classId].name;
-          const classColor = classMap[classId].color;
           const key = `${classId}`;
-          
-          if (!classData[key]) {
-            classData[key] = { name: className, color: classColor, revenue: 0 };
-          }
+          if (!classData[key]) classData[key] = { name: classMap[classId].name, color: classMap[classId].color, revenue: 0 };
           classData[key].revenue += parseFloat(conv.order_amount || 0);
         } else {
-          // Handle uncategorized coupons
-            const key = 'uncategorized';
-            if (!classData[key]) {
-              classData[key] = { name: 'Sem classificação', color: '#6366f1', revenue: 0 };
-            }
-            classData[key].revenue += parseFloat(conv.order_amount || 0);
-          }
+          const key = 'uncategorized';
+          if (!classData[key]) classData[key] = { name: 'Sem classificação', color: '#6366f1', revenue: 0 };
+          classData[key].revenue += parseFloat(conv.order_amount || 0);
+        }
       });
 
-      // Sort by revenue descending and take top 5
       const sorted = Object.values(classData)
         .sort((a, b) => b.revenue - a.revenue)
-        .slice(0, 5)
-        .map(item => ({
-          ...item,
-          revenue: parseFloat(item.revenue.toFixed(2))
-        }));
+        .slice(0, limit)
+        .map(item => ({ ...item, revenue: parseFloat(item.revenue.toFixed(2)) }));
 
       return { data: sorted, error: null };
     } catch (err) {
@@ -1241,43 +1241,50 @@ export const dataFunctions = {
   // Get top 10 coupons by revenue
   getTopCoupons: async (brandId, filters = {}) => {
     try {
+      const startDateStr = filters.startDate ? formatDateForQuery(filters.startDate, false) : '1970-01-01';
+      const endDateStr = filters.endDate ? formatDateForQuery(filters.endDate, true) : formatDateForQuery(new Date(), true);
+      const limit = filters.limit || 10;
+
+      // Prefer RPC for server-side aggregation
+      try {
+        const { data, error } = await supabase.rpc('get_top_coupons', {
+          p_brand_id: brandId,
+          p_start_date: startDateStr,
+          p_end_date: endDateStr,
+          p_limit: limit,
+        });
+        if (!error && data) {
+          const mapped = (data || []).map(r => ({ code: r.code || 'N/A', revenue: parseFloat((r.revenue || 0).toString()) }));
+          return { data: mapped, error: null };
+        }
+      } catch (rpcErr) {
+        console.warn('get_top_coupons RPC failed, falling back to client aggregation:', rpcErr?.message || rpcErr);
+      }
+
+      // Fallback: client-side aggregation (may be truncated by PostgREST limits)
       let query = supabase
         .from('conversions')
         .select('order_amount, sale_date_br_tmz, status, coupons(code)')
         .eq('brand_id', brandId)
         .eq('order_is_real', true)
-        .in('status', ['authorized', 'paid']); // Only count authorized and paid orders
+        .in('status', ['authorized', 'paid']);
 
-      if (filters.startDate) {
-        const startDateStr = formatDateForQuery(filters.startDate, false);
-        query = query.gte('sale_date_br_tmz', startDateStr);
-      }
-      if (filters.endDate) {
-        const endDateStr = formatDateForQuery(filters.endDate, true);
-        query = query.lt('sale_date_br_tmz', endDateStr);
-      }
+      if (filters.startDate) query = query.gte('sale_date_br_tmz', startDateStr);
+      if (filters.endDate) query = query.lt('sale_date_br_tmz', endDateStr);
 
       const { data, error } = await query;
       if (error) throw error;
 
-      // Group by coupon code and sum revenue
       const couponData = {};
       (data || []).forEach(conv => {
         const code = conv.coupons?.code;
-        // Skip orders without coupons
-        if (code && code !== 'N/A') {
-          couponData[code] = (couponData[code] || 0) + parseFloat(conv.order_amount || 0);
-        }
+        if (code && code !== 'N/A') couponData[code] = (couponData[code] || 0) + parseFloat(conv.order_amount || 0);
       });
 
-      // Sort by revenue descending and take top 10
       const sorted = Object.entries(couponData)
         .sort((a, b) => b[1] - a[1])
-        .slice(0, 10)
-        .map(([code, revenue]) => ({
-          code,
-          revenue: parseFloat(revenue.toFixed(2))
-        }));
+        .slice(0, limit)
+        .map(([code, revenue]) => ({ code, revenue: parseFloat(revenue.toFixed(2)) }));
 
       return { data: sorted, error: null };
     } catch (err) {
