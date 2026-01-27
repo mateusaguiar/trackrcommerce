@@ -57,7 +57,7 @@ export function TopClassificationsCard({ data, loading, error }) {
         <BarChart 
           data={data}
           layout="vertical"
-          margin={{ top: 5, right: 30, left: 70, bottom: 5 }}
+          margin={{ top: 5, right: 30, left: 50, bottom: 5 }}
         >
           <CartesianGrid strokeDasharray="3 3" stroke="#27272a" />
           <XAxis type="number" stroke="#a1a1aa" style={{ fontSize: '12px' }} />
