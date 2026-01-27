@@ -266,8 +266,7 @@ export const dataFunctions = {
           customer_email,
           metadata,
           coupon_id,
-          coupons(id, code),
-          utm_data(utm_source, utm_campaign)
+          coupons(id, code)
         `, { count: 'exact' })
         .eq('brand_id', brandId);
 
@@ -296,13 +295,35 @@ export const dataFunctions = {
       const { data, error, count } = await query.range(from, to);
       if (error) throw error;
 
-      // Map coupon_code and apply client-side simple filters (orderId, couponCode)
+      // Map coupon_code and prepare for UTM lookup
       let mapped = (data || []).map(c => ({
         ...c,
         coupon_code: c.coupons?.code || 'N/A',
-        utm_source: c.utm_data?.utm_source || null,
-        utm_campaign: c.utm_data?.utm_campaign || null,
+        utm_source: null,
+        utm_campaign: null,
       }));
+
+      // Fetch utm_data for all returned order_ids in one batch (if any)
+      try {
+        const orderIds = mapped.map(r => r.order_id).filter(Boolean);
+        if (orderIds.length > 0) {
+          const { data: utmRows, error: utmErr } = await supabase
+            .from('utm_data')
+            .select('order_id, utm_source, utm_campaign')
+            .in('order_id', orderIds);
+          if (!utmErr && utmRows) {
+            const utmMap = {};
+            utmRows.forEach(u => { if (u.order_id) utmMap[u.order_id] = u; });
+            mapped = mapped.map(m => ({
+              ...m,
+              utm_source: (m.order_id && utmMap[m.order_id]) ? utmMap[m.order_id].utm_source : null,
+              utm_campaign: (m.order_id && utmMap[m.order_id]) ? utmMap[m.order_id].utm_campaign : null,
+            }));
+          }
+        }
+      } catch (utmFetchErr) {
+        console.warn('Failed to fetch utm_data for conversions:', utmFetchErr);
+      }
 
       if (orderId) {
         mapped = mapped.filter(c => (c.order_number || c.order_id) === orderId);
