@@ -295,11 +295,35 @@ export const dataFunctions = {
       const { data, error, count } = await query.range(from, to);
       if (error) throw error;
 
-      // Map coupon_code and apply client-side simple filters (orderId, couponCode)
+      // Map coupon_code and prepare for UTM lookup
       let mapped = (data || []).map(c => ({
         ...c,
-        coupon_code: c.coupons?.code || 'N/A'
+        coupon_code: c.coupons?.code || 'N/A',
+        utm_source: null,
+        utm_campaign: null,
       }));
+
+      // Fetch utm_data for all returned order_ids in one batch (if any)
+      try {
+        const orderIds = mapped.map(r => r.order_id).filter(Boolean);
+        if (orderIds.length > 0) {
+          const { data: utmRows, error: utmErr } = await supabase
+            .from('utm_data')
+            .select('order_id, utm_source, utm_campaign')
+            .in('order_id', orderIds);
+          if (!utmErr && utmRows) {
+            const utmMap = {};
+            utmRows.forEach(u => { if (u.order_id) utmMap[u.order_id] = u; });
+            mapped = mapped.map(m => ({
+              ...m,
+              utm_source: (m.order_id && utmMap[m.order_id]) ? utmMap[m.order_id].utm_source : null,
+              utm_campaign: (m.order_id && utmMap[m.order_id]) ? utmMap[m.order_id].utm_campaign : null,
+            }));
+          }
+        }
+      } catch (utmFetchErr) {
+        console.warn('Failed to fetch utm_data for conversions:', utmFetchErr);
+      }
 
       if (orderId) {
         mapped = mapped.filter(c => (c.order_number || c.order_id) === orderId);
@@ -1289,6 +1313,114 @@ export const dataFunctions = {
       return { data: sorted, error: null };
     } catch (err) {
       console.error('Error in getTopCoupons:', err);
+      return { data: [], error: err.message || String(err) };
+    }
+  },
+
+  // Get top 10 UTM sources by revenue
+  getTopUTMSources: async (brandId, filters = {}) => {
+    try {
+      const startDateStr = filters.startDate ? formatDateForQuery(filters.startDate, false) : '1970-01-01';
+      const endDateStr = filters.endDate ? formatDateForQuery(filters.endDate, true) : formatDateForQuery(new Date(), true);
+      const limit = filters.limit || 10;
+
+      // Prefer RPC
+      try {
+        const { data, error } = await supabase.rpc('get_top_utm_sources', {
+          p_brand_id: brandId,
+          p_start_date: startDateStr,
+          p_end_date: endDateStr,
+          p_limit: limit,
+        });
+        if (!error && data) {
+          return { data: (data || []).map(r => ({ code: r.utm_source || 'N/A', revenue: parseFloat((r.revenue || 0).toString()) })), error: null };
+        }
+      } catch (rpcErr) {
+        console.warn('get_top_utm_sources RPC failed, falling back to client aggregation:', rpcErr?.message || rpcErr);
+      }
+
+      // Fallback: client-side aggregation
+      let query = supabase
+        .from('conversions')
+        .select('order_amount, sale_date_br_tmz, status, utm_data(utm_source)')
+        .eq('brand_id', brandId)
+        .eq('order_is_real', true)
+        .in('status', ['authorized', 'paid']);
+
+      if (filters.startDate) query = query.gte('sale_date_br_tmz', startDateStr);
+      if (filters.endDate) query = query.lt('sale_date_br_tmz', endDateStr);
+
+      const { data, error } = await query;
+      if (error) throw error;
+
+      const map = {};
+      (data || []).forEach(r => {
+        const source = r.utm_data?.utm_source;
+        if (source) map[source] = (map[source] || 0) + parseFloat(r.order_amount || 0);
+      });
+
+      const sorted = Object.entries(map)
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, limit)
+        .map(([code, revenue]) => ({ code, revenue: parseFloat(revenue.toFixed(2)) }));
+
+      return { data: sorted, error: null };
+    } catch (err) {
+      console.error('Error in getTopUTMSources:', err);
+      return { data: [], error: err.message || String(err) };
+    }
+  },
+
+  // Get top 10 UTM campaigns by revenue
+  getTopUTMCampaigns: async (brandId, filters = {}) => {
+    try {
+      const startDateStr = filters.startDate ? formatDateForQuery(filters.startDate, false) : '1970-01-01';
+      const endDateStr = filters.endDate ? formatDateForQuery(filters.endDate, true) : formatDateForQuery(new Date(), true);
+      const limit = filters.limit || 10;
+
+      // Prefer RPC
+      try {
+        const { data, error } = await supabase.rpc('get_top_utm_campaigns', {
+          p_brand_id: brandId,
+          p_start_date: startDateStr,
+          p_end_date: endDateStr,
+          p_limit: limit,
+        });
+        if (!error && data) {
+          return { data: (data || []).map(r => ({ code: r.utm_campaign || 'N/A', revenue: parseFloat((r.revenue || 0).toString()) })), error: null };
+        }
+      } catch (rpcErr) {
+        console.warn('get_top_utm_campaigns RPC failed, falling back to client aggregation:', rpcErr?.message || rpcErr);
+      }
+
+      // Fallback: client-side aggregation
+      let query = supabase
+        .from('conversions')
+        .select('order_amount, sale_date_br_tmz, status, utm_data(utm_campaign)')
+        .eq('brand_id', brandId)
+        .eq('order_is_real', true)
+        .in('status', ['authorized', 'paid']);
+
+      if (filters.startDate) query = query.gte('sale_date_br_tmz', startDateStr);
+      if (filters.endDate) query = query.lt('sale_date_br_tmz', endDateStr);
+
+      const { data, error } = await query;
+      if (error) throw error;
+
+      const map = {};
+      (data || []).forEach(r => {
+        const campaign = r.utm_data?.utm_campaign;
+        if (campaign) map[campaign] = (map[campaign] || 0) + parseFloat(r.order_amount || 0);
+      });
+
+      const sorted = Object.entries(map)
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, limit)
+        .map(([code, revenue]) => ({ code, revenue: parseFloat(revenue.toFixed(2)) }));
+
+      return { data: sorted, error: null };
+    } catch (err) {
+      console.error('Error in getTopUTMCampaigns:', err);
       return { data: [], error: err.message || String(err) };
     }
   },

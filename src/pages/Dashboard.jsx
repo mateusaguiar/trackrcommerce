@@ -19,6 +19,8 @@ import { DailyRevenueCard } from '../components/DailyRevenueCard.jsx';
 import { TopClassificationsCard } from '../components/TopClassificationsCard.jsx';
 import { TopCouponsCard } from '../components/TopCouponsCard.jsx';
 import { PendingOrdersCard } from '../components/PendingOrdersCard.jsx';
+import { TopUTMSourcesCard } from '../components/TopUTMSourcesCard.jsx';
+import { TopUTMCampaignsCard } from '../components/TopUTMCampaignsCard.jsx';
 import { authFunctions, dataFunctions, getErrorMessage } from '../lib/supabaseClient.js';
 
 export default function Dashboard() {
@@ -90,6 +92,8 @@ export default function Dashboard() {
   const [dailyRevenueData, setDailyRevenueData] = useState([]);
   const [topClassificationsData, setTopClassificationsData] = useState([]);
   const [topCouponsData, setTopCouponsData] = useState([]);
+  const [topUTMSourcesData, setTopUTMSourcesData] = useState([]);
+  const [topUTMCampaignsData, setTopUTMCampaignsData] = useState([]);
   const [pendingOrdersData, setPendingOrdersData] = useState({ revenue: 0, count: 0 });
   const [overviewLoading, setOverviewLoading] = useState(false);
   const [overviewError, setOverviewError] = useState('');
@@ -114,6 +118,8 @@ export default function Dashboard() {
   const conversionColumns = [
     { key: 'order_id', label: 'ID do Pedido' },
     { key: 'coupon_code', label: 'Cupom' },
+    { key: 'utm_source', label: 'UTM_Source' },
+    { key: 'utm_campaign', label: 'Campanha_UTM' },
     { key: 'order_amount', label: 'Valor' },
     { key: 'commission_amount', label: 'Comissão' },
     { key: 'status', label: 'Status' },
@@ -326,21 +332,27 @@ export default function Dashboard() {
         setOverviewLoading(true);
         setOverviewError('');
 
-        const [dailyRev, topClass, topCoup, pendingOrders] = await Promise.all([
+        const [dailyRev, topClass, topCoup, utmSrc, utmCamp, pendingOrders] = await Promise.all([
           dataFunctions.getDailyRevenue(selectedBrand.id, { startDate, endDate }),
           dataFunctions.getTopClassifications(selectedBrand.id, { startDate, endDate }),
           dataFunctions.getTopCoupons(selectedBrand.id, { startDate, endDate }),
+          dataFunctions.getTopUTMSources(selectedBrand.id, { startDate, endDate }),
+          dataFunctions.getTopUTMCampaigns(selectedBrand.id, { startDate, endDate }),
           dataFunctions.getPendingOrders(selectedBrand.id, { startDate, endDate }),
         ]);
 
         if (dailyRev.error) throw new Error(dailyRev.error);
         if (topClass.error) throw new Error(topClass.error);
         if (topCoup.error) throw new Error(topCoup.error);
+        if (utmSrc.error) console.warn('UTM sources load error:', utmSrc.error);
+        if (utmCamp.error) console.warn('UTM campaigns load error:', utmCamp.error);
         if (pendingOrders.error) throw new Error(pendingOrders.error);
 
         setDailyRevenueData(dailyRev.data || []);
         setTopClassificationsData(topClass.data || []);
         setTopCouponsData(topCoup.data || []);
+        setTopUTMSourcesData(utmSrc.data || []);
+        setTopUTMCampaignsData(utmCamp.data || []);
         setPendingOrdersData(pendingOrders.data || { revenue: 0, count: 0 });
 
         setOverviewLoading(false);
@@ -736,6 +748,12 @@ export default function Dashboard() {
                       loading={overviewLoading}
                       error={overviewError}
                     />
+                  </div>
+
+                  {/* UTM Charts */}
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    <TopUTMSourcesCard data={topUTMSourcesData} loading={overviewLoading} error={overviewError} />
+                    <TopUTMCampaignsCard data={topUTMCampaignsData} loading={overviewLoading} error={overviewError} />
                   </div>
 
                   {/* Pending Orders Card */}
@@ -1286,6 +1304,22 @@ export default function Dashboard() {
                                   Cupom {renderSortIcon('coupon_code', false)}
                                 </th>
                               )}
+                              {visibleConversionColumns.includes('utm_source') && (
+                                <th 
+                                  onClick={() => handleConversionSort('utm_source')}
+                                  className="text-left py-4 px-4 text-sm font-medium text-zinc-400 cursor-pointer hover:text-zinc-200 transition"
+                                >
+                                  UTM_Source {renderSortIcon('utm_source', false)}
+                                </th>
+                              )}
+                              {visibleConversionColumns.includes('utm_campaign') && (
+                                <th 
+                                  onClick={() => handleConversionSort('utm_campaign')}
+                                  className="text-left py-4 px-4 text-sm font-medium text-zinc-400 cursor-pointer hover:text-zinc-200 transition"
+                                >
+                                  Campanha_UTM {renderSortIcon('utm_campaign', false)}
+                                </th>
+                              )}
                               {visibleConversionColumns.includes('order_amount') && (
                                 <th 
                                   onClick={() => handleConversionSort('order_amount')}
@@ -1333,6 +1367,16 @@ export default function Dashboard() {
                                 {visibleConversionColumns.includes('coupon_code') && (
                                   <td className="py-4 px-4 text-sm">
                                     <span className="font-mono text-indigo-400">{conversion.coupon_code || 'N/A'}</span>
+                                  </td>
+                                )}
+                                {visibleConversionColumns.includes('utm_source') && (
+                                  <td className="py-4 px-4 text-sm">
+                                    <span className="font-mono text-zinc-300">{conversion.utm_source || '-'}</span>
+                                  </td>
+                                )}
+                                {visibleConversionColumns.includes('utm_campaign') && (
+                                  <td className="py-4 px-4 text-sm">
+                                    <span className="font-mono text-zinc-300">{conversion.utm_campaign || '-'}</span>
                                   </td>
                                 )}
                                 {visibleConversionColumns.includes('order_amount') && (
