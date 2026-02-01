@@ -3,6 +3,7 @@ import { TrendingUp, Ticket, DollarSign, BarChart3, ShoppingBag, Users } from 'l
 import { Button } from './components/Button.jsx';
 import { Modal } from './components/Modal.jsx';
 import { AuthForm } from './components/AuthForm.jsx';
+import N8nChatbox from './components/N8nChatbox.jsx';
 
 export default function App() {
   const [isLoginOpen, setIsLoginOpen] = useState(false);
@@ -110,6 +111,9 @@ export default function App() {
           // Routing is handled by app-root.jsx which listens to auth state changes
         }} />
       </Modal>
+
+      {/* N8n Chatbox */}
+      <N8nChatbox />
     </div>
   );
 }

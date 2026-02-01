@@ -8,6 +8,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@n8n/chat": "^1.4.0-exp.0",
     "@supabase/supabase-js": "^2.90.1",
     "@vercel/analytics": "^1.6.1",
     "lucide-react": "^0.263.1",
